@@ -168,3 +168,48 @@ def test_migration_splits_old_location():
     assert m._split_location("kadikoy") == ("Istanbul", "Kadıköy")
     assert m._split_location("İstanbul") == ("Istanbul", None)
     assert m._split_location("Ankara") == ("Ankara", None)
+
+
+def test_district_implies_side(client):
+    job = make_job(client, city="Istanbul", district="Kadıköy", side="avrupa")
+    assert (job["side"], job["district"]) == ("anadolu", "Kadıköy")
+
+
+def test_side_without_district(client):
+    job = make_job(client, city="Istanbul", side="avrupa")
+    assert (job["city"], job["side"], job["district"]) == ("Istanbul", "avrupa", None)
+    res = client.patch(f"/api/jobs/{job['id']}", json={"district": "Pendik"}).json()
+    assert (res["side"], res["district"]) == ("anadolu", "Pendik")
+
+
+def test_other_city_clears_side_and_district(client):
+    job = make_job(client, city="Istanbul", district="Şişli")
+    res = client.patch(f"/api/jobs/{job['id']}", json={"city": "Ankara"}).json()
+    assert (res["city"], res["side"], res["district"]) == ("Ankara", None, None)
+    assert client.post("/api/jobs", json={"company": "A", "title": "x", "side": "north"}).status_code == 422
+
+
+def test_side_migration_backfills_existing_jobs(tmp_path):
+    import sqlite3
+
+    from alembic import command
+    from alembic.config import Config
+
+    from jobpilot.main import MIGRATIONS_DIR
+
+    db = tmp_path / "old.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db}")
+    command.upgrade(cfg, "78178a8c7016")
+    con = sqlite3.connect(db)
+    con.execute("INSERT INTO company (id, name, name_key) VALUES (1, 'A', 'a')")
+    for i, (city, district) in enumerate([("Istanbul", "Pendik"), ("Istanbul", "Şişli"), ("Ankara", None)], 1):
+        con.execute(
+            "INSERT INTO job (id, company_id, title, city, district, status, notes, date_saved)"
+            " VALUES (?, 1, 't', ?, ?, 'saved', '', '2026-10-29 00:00:00')",
+            (i, city, district),
+        )
+    con.commit()
+    command.upgrade(cfg, "head")
+    assert con.execute("SELECT side FROM job ORDER BY id").fetchall() == [("anadolu",), ("avrupa",), (None,)]

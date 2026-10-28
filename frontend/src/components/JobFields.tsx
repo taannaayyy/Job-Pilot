@@ -1,5 +1,6 @@
-import { DISTRICTS, ISTANBUL, SIDE_LABELS, type Side } from "../locations";
+import { ISTANBUL } from "../locations";
 import { WORK_MODES, WORK_MODE_LABELS, type JobInput, type WorkMode } from "../types";
+import DistrictPicker from "./DistrictPicker";
 
 export const SOURCES = ["LinkedIn", "Company site", "Referral", "Kariyer.net", "Other"];
 
@@ -10,6 +11,7 @@ export function emptyInput(): JobInput {
     title: "",
     url: null,
     city: ISTANBUL,
+    side: null,
     district: null,
     work_mode: null,
     source: "LinkedIn",
@@ -38,7 +40,7 @@ export default function JobFields({ value, onChange, autoFocus }: Props) {
     if (next === mode) return;
     // "Other" starts as an empty string (not null) so the city text box shows up.
     const city = next === "istanbul" ? ISTANBUL : next === "other" ? "" : null;
-    onChange({ ...value, city, district: null });
+    onChange({ ...value, city, side: null, district: null });
   };
 
   return (
@@ -74,21 +76,13 @@ export default function JobFields({ value, onChange, autoFocus }: Props) {
         </select>
       </label>
       {mode === "istanbul" && (
-        <label className="reveal">
-          District
-          <select value={value.district ?? ""} onChange={(e) => set("district", e.target.value || null)}>
-            <option value="">Any district</option>
-            {(Object.keys(DISTRICTS) as Side[]).map((side) => (
-              <optgroup key={side} label={SIDE_LABELS[side]}>
-                {DISTRICTS[side].map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
+        <div className="field reveal">
+          <span className="field-label">District</span>
+          <DistrictPicker
+            value={{ side: value.side, district: value.district }}
+            onChange={(v) => onChange({ ...value, ...v })}
+          />
+        </div>
       )}
       {mode === "other" && (
         <label className="reveal">

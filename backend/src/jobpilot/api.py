@@ -7,6 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from jobpilot.db import utcnow
+from jobpilot.locations import normalize_location
 from jobpilot.logos import domain_of, sniff_media_type
 from jobpilot.models import Company, Job, JobStatus, StatusEvent, WorkMode, company_key
 from jobpilot.schemas import JobCreate, JobDetail, JobOut, JobUpdate
@@ -89,6 +90,7 @@ def create_job(body: JobCreate, session: Session = Depends(get_session)):
     if body.company_website:  # a blank website never erases one already known for the company
         company.website = body.company_website
     job = Job(company=company, **fields)
+    job.city, job.side, job.district = normalize_location(job.city, job.side, job.district)
     _set_status(job, body.status)
     session.add(job)
     session.commit()
@@ -116,6 +118,7 @@ def update_job(job_id: int, body: JobUpdate, session: Session = Depends(get_sess
         if field in ("title", "notes") and value is None:
             continue
         setattr(job, field, value)
+    job.city, job.side, job.district = normalize_location(job.city, job.side, job.district)
     session.commit()
     return _to_out(job, JobDetail)
 

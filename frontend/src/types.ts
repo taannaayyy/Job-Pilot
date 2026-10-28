@@ -39,6 +39,7 @@ export interface Job {
   title: string;
   url: string | null;
   city: string | null;
+  side: "anadolu" | "avrupa" | null;
   district: string | null;
   work_mode: WorkMode | null;
   source: string | null;
@@ -66,6 +67,7 @@ export type JobInput = {
   title: string;
   url: string | null;
   city: string | null;
+  side: "anadolu" | "avrupa" | null;
   district: string | null;
   work_mode: WorkMode | null;
   source: string | null;

@@ -16,8 +16,8 @@ interface Props {
 }
 
 function toInput(job: JobDetail): JobInput {
-  const { company, company_website, title, url, city, district, work_mode, source, next_action, notes } = job;
-  return { company, company_website, title, url, city, district, work_mode, source, next_action, notes };
+  const { company, company_website, title, url, city, side, district, work_mode, source, next_action, notes } = job;
+  return { company, company_website, title, url, city, side, district, work_mode, source, next_action, notes };
 }
 
 export default function JobPanel({ jobId, onClose, onSaved, onDeleted }: Props) {

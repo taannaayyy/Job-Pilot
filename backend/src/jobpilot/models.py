@@ -48,7 +48,8 @@ class Job(Base):
     title: Mapped[str] = mapped_column(String(300))
     url: Mapped[str | None] = mapped_column(String(1000))
     city: Mapped[str | None] = mapped_column(String(100))
-    # Only for Istanbul; the Anadolu/Avrupa side is derived from it in the UI.
+    # Only for Istanbul. Side can be set alone ("anywhere on Anadolu"); a district implies its side.
+    side: Mapped[str | None] = mapped_column(String(10))
     district: Mapped[str | None] = mapped_column(String(100))
     work_mode: Mapped[WorkMode | None] = mapped_column(String(20))
     source: Mapped[str | None] = mapped_column(String(100))

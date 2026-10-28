@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
+from jobpilot.locations import Side
 from jobpilot.logos import normalize_website
 
 from jobpilot.models import JobStatus, WorkMode
@@ -25,6 +26,7 @@ class JobCreate(_JobFields):
     title: str = Field(min_length=1, max_length=300)
     url: HttpUrl | None = None
     city: str | None = Field(default=None, max_length=100)
+    side: Side | None = None
     district: str | None = Field(default=None, max_length=100)
     work_mode: WorkMode | None = None
     source: str | None = None
@@ -41,6 +43,7 @@ class JobUpdate(_JobFields):
     title: str | None = Field(default=None, min_length=1, max_length=300)
     url: HttpUrl | None = None
     city: str | None = Field(default=None, max_length=100)
+    side: Side | None = None
     district: str | None = Field(default=None, max_length=100)
     work_mode: WorkMode | None = None
     source: str | None = None
@@ -69,6 +72,7 @@ class JobOut(BaseModel):
     title: str
     url: str | None
     city: str | None
+    side: Side | None
     district: str | None
     work_mode: WorkMode | None
     source: str | None
