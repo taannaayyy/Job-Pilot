@@ -14,6 +14,8 @@ class JobStatus(StrEnum):
     APPLIED = "applied"
     SCREENING = "screening"
     INTERVIEW = "interview"
+    # All interviews done, waiting for their answer.
+    AWAITING = "awaiting"
     OFFER = "offer"
     REJECTED = "rejected"
     GHOSTED = "ghosted"
@@ -23,6 +25,13 @@ class WorkMode(StrEnum):
     REMOTE = "remote"
     HYBRID = "hybrid"
     ONSITE = "onsite"
+
+
+class JobType(StrEnum):
+    FULL_TIME = "full_time"
+    PART_TIME = "part_time"
+    INTERNSHIP = "internship"
+    CONTRACT = "contract"
 
 
 class OrgKind(StrEnum):
@@ -39,7 +48,7 @@ class Openings(StrEnum):
 
 
 # Jobs still going somewhere; counted as "active" on the watchlist.
-ACTIVE_STATUSES = {"inbox", "saved", "applied", "screening", "interview", "offer"}
+ACTIVE_STATUSES = {"inbox", "saved", "applied", "screening", "interview", "awaiting", "offer"}
 
 
 def company_key(name: str) -> str:
@@ -79,6 +88,7 @@ class Job(Base):
     # Only for Istanbul. Side can be set alone ("anywhere on Anadolu"); a district implies its side.
     side: Mapped[str | None] = mapped_column(String(10))
     district: Mapped[str | None] = mapped_column(String(100))
+    job_type: Mapped[JobType | None] = mapped_column(String(20))
     work_mode: Mapped[WorkMode | None] = mapped_column(String(20))
     source: Mapped[str | None] = mapped_column(String(100))
     status: Mapped[JobStatus] = mapped_column(String(20), default=JobStatus.SAVED, index=True)

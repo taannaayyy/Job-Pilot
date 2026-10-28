@@ -15,7 +15,7 @@ from jobpilot.schemas import CompanyCreate, CompanyOut, CompanyUpdate, JobCreate
 router = APIRouter(prefix="/api")
 
 # Reaching any of these means the user applied, even if Applied itself was skipped.
-APPLIED_OR_LATER = {JobStatus.APPLIED, JobStatus.SCREENING, JobStatus.INTERVIEW, JobStatus.OFFER}
+APPLIED_OR_LATER = {JobStatus.APPLIED, JobStatus.SCREENING, JobStatus.INTERVIEW, JobStatus.AWAITING, JobStatus.OFFER}
 
 
 def get_session(request: Request) -> Iterator[Session]:

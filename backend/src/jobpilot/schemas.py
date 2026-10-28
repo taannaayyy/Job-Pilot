@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 from jobpilot.locations import Side
 from jobpilot.logos import normalize_website
 
-from jobpilot.models import JobStatus, Openings, OrgKind, WorkMode
+from jobpilot.models import JobStatus, JobType, Openings, OrgKind, WorkMode
 
 
 def _with_scheme(v):
@@ -39,6 +39,7 @@ class JobCreate(_JobFields):
     city: str | None = Field(default=None, max_length=100)
     side: Side | None = None
     district: str | None = Field(default=None, max_length=100)
+    job_type: JobType | None = None
     work_mode: WorkMode | None = None
     source: str | None = None
     status: JobStatus = JobStatus.SAVED
@@ -56,6 +57,7 @@ class JobUpdate(_JobFields):
     city: str | None = Field(default=None, max_length=100)
     side: Side | None = None
     district: str | None = Field(default=None, max_length=100)
+    job_type: JobType | None = None
     work_mode: WorkMode | None = None
     source: str | None = None
     status: JobStatus | None = None
@@ -86,6 +88,7 @@ class JobOut(BaseModel):
     city: str | None
     side: Side | None
     district: str | None
+    job_type: JobType | None
     work_mode: WorkMode | None
     source: str | None
     status: JobStatus

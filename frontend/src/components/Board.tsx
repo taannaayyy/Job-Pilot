@@ -3,7 +3,7 @@ import { fmtDate } from "../format";
 import { locationLabel } from "../locations";
 import CompanyLogo from "./CompanyLogo";
 import { CheckIcon } from "./Icons";
-import { STATUSES, STATUS_LABELS, WORK_MODE_LABELS, type Job, type Status } from "../types";
+import { JOB_TYPE_LABELS, STATUSES, STATUS_LABELS, STATUS_SHORT_LABELS, WORK_MODE_LABELS, type Job, type Status } from "../types";
 
 interface Props {
   jobs: Job[];
@@ -41,9 +41,9 @@ export default function Board({ jobs, showInbox, statusFilter, onOpen, onStatusC
               if (job && job.status !== status) onStatusChange(id, status);
             }}
           >
-            <header className="column-head">
+            <header className="column-head" title={STATUS_LABELS[status]}>
               <span className={`dot status-${status}`} />
-              {STATUS_LABELS[status]}
+              <span className="column-title">{STATUS_SHORT_LABELS[status]}</span>
               <span className="count">{items.length}</span>
             </header>
             <div className="cards">
@@ -70,7 +70,9 @@ export default function Board({ jobs, showInbox, statusFilter, onOpen, onStatusC
                   </div>
                   <div className="card-title">{job.title}</div>
                   <div className="card-meta">
-                    {[job.work_mode && WORK_MODE_LABELS[job.work_mode], locationLabel(job)].filter(Boolean).join(" · ")}
+                    {[job.job_type && JOB_TYPE_LABELS[job.job_type], job.work_mode && WORK_MODE_LABELS[job.work_mode], locationLabel(job)]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                   {job.next_action && <div className="card-next">→ {job.next_action}</div>}
                   <div className="card-foot">

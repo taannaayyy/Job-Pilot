@@ -4,6 +4,7 @@ export const STATUSES = [
   "applied",
   "screening",
   "interview",
+  "awaiting",
   "offer",
   "rejected",
   "ghosted",
@@ -16,10 +17,24 @@ export const STATUS_LABELS: Record<Status, string> = {
   applied: "Applied",
   screening: "Screening",
   interview: "Interview",
+  awaiting: "Awaiting decision",
   offer: "Offer",
   rejected: "Rejected",
   ghosted: "Ghosted",
 };
+
+export const JOB_TYPES = ["full_time", "part_time", "internship", "contract"] as const;
+export type JobType = (typeof JOB_TYPES)[number];
+
+export const JOB_TYPE_LABELS: Record<JobType, string> = {
+  full_time: "Full-time",
+  part_time: "Part-time",
+  internship: "Internship",
+  contract: "Contract",
+};
+
+/** Board column headers are narrow at small window sizes. */
+export const STATUS_SHORT_LABELS: Record<Status, string> = { ...STATUS_LABELS, awaiting: "Awaiting" };
 
 export const WORK_MODES = ["remote", "hybrid", "onsite"] as const;
 export type WorkMode = (typeof WORK_MODES)[number];
@@ -42,6 +57,7 @@ export interface Job {
   city: string | null;
   side: "anadolu" | "avrupa" | null;
   district: string | null;
+  job_type: JobType | null;
   work_mode: WorkMode | null;
   source: string | null;
   status: Status;
@@ -70,6 +86,7 @@ export type JobInput = {
   city: string | null;
   side: "anadolu" | "avrupa" | null;
   district: string | null;
+  job_type: JobType | null;
   work_mode: WorkMode | null;
   source: string | null;
   next_action: string | null;

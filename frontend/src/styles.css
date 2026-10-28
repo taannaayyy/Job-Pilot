@@ -25,6 +25,7 @@
   --st-applied: #2f8fde;
   --st-screening: #10a3a3;
   --st-interview: #d98c10;
+  --st-awaiting: #b25fd6;
   --st-offer: #22a55a;
   --st-rejected: #d14b4b;
   --st-ghosted: #9aa1ad;
@@ -62,6 +63,7 @@
     --st-applied: #4ea6f0;
     --st-screening: #2cc2c2;
     --st-interview: #f0a63a;
+    --st-awaiting: #c98bf0;
     --st-offer: #3cc47a;
     --st-rejected: #ef6a6a;
     --st-ghosted: #7d8594;
@@ -91,6 +93,7 @@
   --st-applied: #4ea6f0;
   --st-screening: #2cc2c2;
   --st-interview: #f0a63a;
+  --st-awaiting: #c98bf0;
   --st-offer: #3cc47a;
   --st-rejected: #ef6a6a;
   --st-ghosted: #7d8594;
@@ -357,6 +360,7 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
 .status-applied { --st: var(--st-applied); }
 .status-screening { --st: var(--st-screening); }
 .status-interview { --st: var(--st-interview); }
+.status-awaiting { --st: var(--st-awaiting); }
 .status-offer { --st: var(--st-offer); }
 .status-rejected { --st: var(--st-rejected); }
 .status-ghosted { --st: var(--st-ghosted); }
@@ -381,15 +385,16 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
 
 /* ---------- board ---------- */
 
-.board { display: flex; gap: 12px; align-items: flex-start; min-height: 100%; }
+.board { display: flex; gap: 10px; align-items: flex-start; min-height: 100%; }
 .column {
   flex: 1 1 0;
-  min-width: 140px;
+  /* Eight columns must fit at the minimum window width (1200px, MIN_SIZE in desktop.py). */
+  min-width: 132px;
   max-width: 320px;
   background: color-mix(in srgb, var(--surface-2) 80%, transparent);
   border: 1.5px solid transparent;
   border-radius: 12px;
-  padding: 10px;
+  padding: 10px 8px;
   min-height: 220px;
   transition: background-color 0.2s, border-color 0.2s, transform 0.25s var(--ease-spring);
   animation: rise 0.45s var(--ease-out) both;
@@ -407,7 +412,10 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
   background: var(--glow);
   transform: scale(1.015);
 }
-.column-head { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 2px 4px 10px; }
+.column-head { display: flex; align-items: center; gap: 6px; font-weight: 600; padding: 2px 2px 10px 4px; white-space: nowrap; min-width: 0; }
+/* One line at any width: a long name is cut so the count always has room. */
+.column-title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.column-head .count { flex-shrink: 0; }
 .count {
   margin-left: auto;
   color: var(--muted);
@@ -416,7 +424,7 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0 8px;
+  padding: 0 6px;
   font-variant-numeric: tabular-nums;
 }
 .cards { display: flex; flex-direction: column; gap: 8px; }
@@ -739,8 +747,12 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
 .picker-empty { padding: 18px 10px; text-align: center; color: var(--muted); font-size: 13px; }
 @keyframes picker-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
 
-/* Reveals the district / city-name field when the city choice changes. */
-.reveal { animation: rise 0.25s var(--ease-out) both; }
+/* Reveals the district / city-name field when the city choice changes. "backwards" (not
+   "both") so nothing is left applied afterwards: a lingering transform would trap the
+   district list below the fields and buttons after it. */
+.reveal { animation: rise 0.25s var(--ease-out) backwards; }
+/* The open district list must cover the fields and buttons below it. */
+.picker-field { position: relative; z-index: 3; }
 
 /* ---------- table ---------- */
 
@@ -780,6 +792,22 @@ tbody tr { cursor: pointer; transition: background-color 0.15s; animation: fade-
 tbody tr:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 tbody tr:last-child td { border-bottom: none; }
 td.strong { font-weight: 600; }
+.role-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.type-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.type-tag.internship {
+  color: var(--st-saved);
+  border-color: color-mix(in srgb, var(--st-saved) 40%, var(--border));
+  background: color-mix(in srgb, var(--st-saved) 10%, var(--surface));
+}
 td.num { font-variant-numeric: tabular-nums; }
 
 /* ---------- overlays ---------- */

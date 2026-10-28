@@ -268,3 +268,21 @@ def test_company_rename_conflict_and_delete_rules(client):
     assert client.delete(f"/api/companies/{job['company_id']}").status_code == 409
     assert client.delete(f"/api/companies/{a['id']}").status_code == 204
     assert client.get(f"/api/companies/{a['id']}").status_code == 404
+
+
+def test_job_type(client):
+    job = make_job(client, job_type="internship")
+    assert job["job_type"] == "internship"
+    assert make_job(client)["job_type"] is None
+    res = client.patch(f"/api/jobs/{job['id']}", json={"job_type": "full_time"}).json()
+    assert res["job_type"] == "full_time"
+    assert client.post("/api/jobs", json={"company": "A", "title": "x", "job_type": "gig"}).status_code == 422
+
+
+def test_awaiting_decision_status(client):
+    job = make_job(client)
+    res = client.patch(f"/api/jobs/{job['id']}", json={"status": "awaiting"}).json()
+    assert res["status"] == "awaiting"
+    assert res["date_applied"] is not None  # past the interviews means applied
+    org = client.post("/api/companies", json={"name": "Acme AI"}).json()
+    assert org["active_job_count"] == 1

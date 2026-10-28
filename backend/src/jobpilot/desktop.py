@@ -115,7 +115,9 @@ class _Api:
             pass  # only affects the window color on the next launch
 
 
-MIN_SIZE = (1120, 640)  # smallest size at which the header, filters, table and board all still fit
+# Smallest size at which the header, filters, table and all eight board columns (with
+# their names on one line) still fit.
+MIN_SIZE = (1200, 640)
 
 
 def _initial_size() -> tuple[int, int]:

@@ -5,12 +5,12 @@ A local, single-user macOS app for tracking job applications. Everything stays o
 ## Features
 
 - **Board and table views.** Use the kanban board with drag and drop, or a sortable table.
-- **Statuses.** A job moves through Saved, Applied, Screening, Interview, Offer, Rejected and Ghosted.
+- **Statuses.** A job moves through Saved, Applied, Screening, Interview, Awaiting decision (all interviews done, waiting for their answer), Offer, Rejected and Ghosted.
 - **Automatic applied date.** It is stamped the first time a job moves to Applied or a later stage.
-- **Status history** for every job, plus notes, a next action, the job URL, work mode and source.
+- **Status history** for every job, plus notes, a next action, the job URL, job type (full-time, part-time, internship, contract), work mode and source.
 - **Company logos.** Add a company's website and its logo appears next to the name. Companies without a website get a colored badge with their initials. Each logo is downloaded once and saved on your Mac.
 - **Istanbul locations.** City defaults to Istanbul. Pick a district, or just a side ("All of Anadolu Yakası"), from a searchable list grouped by Anadolu Yakası and Avrupa Yakası. Or choose "Other city" and type it.
-- **Search and filters.** Search by company, title or district, and filter by status, work mode and location (Anadolu, Avrupa or other cities).
+- **Search and filters.** Search by company, title or district, and filter by status, job type, work mode and location (Anadolu, Avrupa or other cities).
 - **Watchlist.** Save the companies, startups, research centers and universities you would like to work at, even before they have a job you want. Each card links to its careers page and its LinkedIn jobs, and records whether it was hiring when you last checked. Cards that haven't been checked for two weeks are marked as due. Add a job there in one click, or star a company from any job.
 - **Company deduplication.** "Acme AI" and "acme ai" count as the same company.
 - **Light, night and system themes.** The native title bar follows the theme.

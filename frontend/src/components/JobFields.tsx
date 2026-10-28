@@ -1,5 +1,5 @@
 import { ISTANBUL } from "../locations";
-import { WORK_MODES, WORK_MODE_LABELS, type JobInput, type WorkMode } from "../types";
+import { JOB_TYPES, JOB_TYPE_LABELS, WORK_MODES, WORK_MODE_LABELS, type JobInput, type JobType, type WorkMode } from "../types";
 import DistrictPicker from "./DistrictPicker";
 
 export const SOURCES = ["LinkedIn", "Company site", "Referral", "Kariyer.net", "Other"];
@@ -13,6 +13,7 @@ export function emptyInput(): JobInput {
     city: ISTANBUL,
     side: null,
     district: null,
+    job_type: null,
     work_mode: null,
     source: "LinkedIn",
     next_action: null,
@@ -82,7 +83,7 @@ export default function JobFields({ value, onChange, autoFocus }: Props) {
         </select>
       </label>
       {mode === "istanbul" && (
-        <div className="field reveal">
+        <div className="field reveal picker-field">
           <span className="field-label">District</span>
           <DistrictPicker
             value={{ side: value.side, district: value.district }}
@@ -103,6 +104,20 @@ export default function JobFields({ value, onChange, autoFocus }: Props) {
       )}
       {mode === "none" && <div />}
 
+      <label>
+        Job type
+        <select
+          value={value.job_type ?? ""}
+          onChange={(e) => set("job_type", (e.target.value || null) as JobType | null)}
+        >
+          <option value="">—</option>
+          {JOB_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {JOB_TYPE_LABELS[t]}
+            </option>
+          ))}
+        </select>
+      </label>
       <label>
         Work mode
         <select
@@ -130,7 +145,7 @@ export default function JobFields({ value, onChange, autoFocus }: Props) {
           ))}
         </datalist>
       </label>
-      <label className="wide">
+      <label>
         Next action
         <input placeholder="Message the recruiter" value={value.next_action ?? ""} onChange={text("next_action")} />
       </label>

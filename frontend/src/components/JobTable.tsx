@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { fmtDate } from "../format";
-import { STATUSES, WORK_MODE_LABELS, type Job, type Status } from "../types";
+import { JOB_TYPE_LABELS, STATUSES, WORK_MODE_LABELS, type Job, type Status } from "../types";
 import { locationLabel } from "../locations";
 import CompanyLogo from "./CompanyLogo";
 import StatusSelect from "./StatusSelect";
@@ -74,7 +74,12 @@ export default function JobTable({ jobs, onOpen, onStatusChange }: Props) {
                   <span className="truncate">{job.company}</span>
                 </span>
               </td>
-              <td title={job.title}>{job.title}</td>
+              <td title={job.job_type ? `${job.title} · ${JOB_TYPE_LABELS[job.job_type]}` : job.title}>
+                <span className="role-cell">
+                  <span className="truncate">{job.title}</span>
+                  {job.job_type && <span className={`type-tag ${job.job_type}`}>{JOB_TYPE_LABELS[job.job_type]}</span>}
+                </span>
+              </td>
               <td>
                 <StatusSelect value={job.status} onChange={(s) => onStatusChange(job.id, s)} />
               </td>

@@ -12,6 +12,8 @@ import Watchlist from "./components/Watchlist";
 import { useTheme } from "./theme";
 import { SIDE_LABELS, matchesLocation, type LocationFilter } from "./locations";
 import {
+  JOB_TYPES,
+  JOB_TYPE_LABELS,
   STATUSES,
   STATUS_LABELS,
   WORK_MODES,
@@ -19,6 +21,7 @@ import {
   type Company,
   type Job,
   type JobInput,
+  type JobType,
   type Openings,
   type Status,
   type WorkMode,
@@ -59,6 +62,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [modeFilter, setModeFilter] = useState<WorkMode | "">("");
+  const [typeFilter, setTypeFilter] = useState<JobType | "">("");
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("");
   // null: closed; otherwise the job form is open, prefilled with these fields.
   const [newJob, setNewJob] = useState<Partial<JobInput> | null>(null);
@@ -108,11 +112,12 @@ export default function App() {
       (j) =>
         (!statusFilter || j.status === statusFilter) &&
         (!modeFilter || j.work_mode === modeFilter) &&
+        (!typeFilter || j.job_type === typeFilter) &&
         matchesLocation(j, locationFilter) &&
         (!q ||
           [j.company, j.title, j.city, j.district].some((v) => v?.toLocaleLowerCase("tr").includes(q))),
     );
-  }, [jobs, query, statusFilter, modeFilter, locationFilter]);
+  }, [jobs, query, statusFilter, modeFilter, typeFilter, locationFilter]);
 
   const changeStatus = useCallback(
     async (id: number, status: Status) => {
@@ -157,7 +162,7 @@ export default function App() {
   };
 
   const applied = jobs.filter((j) => j.date_applied).length;
-  const active = jobs.filter((j) => ["applied", "screening", "interview"].includes(j.status)).length;
+  const active = jobs.filter((j) => ["applied", "screening", "interview", "awaiting"].includes(j.status)).length;
   const openOrg = orgs.find((o) => o.id === openOrgId) ?? null;
 
   return (
@@ -235,6 +240,14 @@ export default function App() {
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as JobType | "")}>
+            <option value="">Any job type</option>
+            {JOB_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {JOB_TYPE_LABELS[t]}
               </option>
             ))}
           </select>
