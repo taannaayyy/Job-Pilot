@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { STATUSES, STATUS_LABELS, type Status } from "../types";
+import { STATUSES, STATUS_LABELS, type JobInput, type Status } from "../types";
 import { useClosing } from "../useClosing";
 import JobFields, { emptyInput } from "./JobFields";
 
 interface Props {
+  /** Prefilled fields, e.g. the organization when adding a job from the watchlist. */
+  initial?: Partial<JobInput>;
   onCancel: () => void;
-  onSubmit: (input: ReturnType<typeof emptyInput> & { status: Status }) => Promise<void>;
+  onSubmit: (input: JobInput & { status: Status }) => Promise<void>;
 }
 
-export default function JobForm({ onCancel, onSubmit }: Props) {
-  const [input, setInput] = useState(emptyInput);
+export default function JobForm({ initial, onCancel, onSubmit }: Props) {
+  const [input, setInput] = useState<JobInput>(() => ({ ...emptyInput(), ...initial }));
   const [status, setStatus] = useState<Status>("saved");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,7 +35,7 @@ export default function JobForm({ onCancel, onSubmit }: Props) {
         }}
       >
         <h2>Add job</h2>
-        <JobFields value={input} onChange={setInput} autoFocus />
+        <JobFields value={input} onChange={setInput} autoFocus={initial?.company ? "title" : "company"} />
         <label className="inline">
           Status
           <select value={status} onChange={(e) => setStatus(e.target.value as Status)}>

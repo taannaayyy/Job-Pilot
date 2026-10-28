@@ -27,7 +27,8 @@ const cityMode = (city: string | null): CityMode => (city === ISTANBUL ? "istanb
 interface Props {
   value: JobInput;
   onChange: (value: JobInput) => void;
-  autoFocus?: boolean;
+  /** Which field gets focus when the form opens. */
+  autoFocus?: "company" | "title";
 }
 
 export default function JobFields({ value, onChange, autoFocus }: Props) {
@@ -47,12 +48,17 @@ export default function JobFields({ value, onChange, autoFocus }: Props) {
     <div className="fields">
       <label>
         Company *
-        <input required autoFocus={autoFocus} value={value.company} onChange={(e) => set("company", e.target.value)} />
+        <input
+          required
+          autoFocus={autoFocus === "company"}
+          value={value.company}
+          onChange={(e) => set("company", e.target.value)}
+        />
       </label>
       <label>
         Company website
         <input
-          placeholder="company.com"
+          placeholder="example.com"
           value={value.company_website ?? ""}
           onChange={text("company_website")}
           title="Used to show the company logo"
@@ -60,7 +66,7 @@ export default function JobFields({ value, onChange, autoFocus }: Props) {
       </label>
       <label className="wide">
         Role title *
-        <input required value={value.title} onChange={(e) => set("title", e.target.value)} />
+        <input required autoFocus={autoFocus === "title"} value={value.title} onChange={(e) => set("title", e.target.value)} />
       </label>
       <label className="wide">
         Job URL
@@ -130,7 +136,7 @@ export default function JobFields({ value, onChange, autoFocus }: Props) {
       </label>
       <label className="wide">
         Notes
-        <textarea rows={6} value={value.notes} onChange={(e) => set("notes", e.target.value)} />
+        <textarea rows={4} value={value.notes} onChange={(e) => set("notes", e.target.value)} />
       </label>
     </div>
   );

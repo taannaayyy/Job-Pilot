@@ -115,6 +115,27 @@ class _Api:
             pass  # only affects the window color on the next launch
 
 
+MIN_SIZE = (1120, 640)  # smallest size at which the header, filters, table and board all still fit
+
+
+def _initial_size() -> tuple[int, int]:
+    """Most of the screen the window opens on (so side panels fit without scrolling),
+    capped on very large screens and never larger than the screen itself."""
+    import AppKit
+
+    AppKit.NSApplication.sharedApplication()
+    screen = AppKit.NSScreen.mainScreen()
+    if screen is None:
+        return 1400, 900
+    area = screen.visibleFrame().size  # excludes the menu bar and the Dock
+    width = min(1600, round(area.width * 0.92))
+    height = min(1000, round(area.height * 0.94))
+    return (
+        min(max(width, MIN_SIZE[0]), round(area.width)),
+        min(max(height, MIN_SIZE[1]), round(area.height)),
+    )
+
+
 def main() -> None:
     if not (WEB_DIR / "index.html").is_file():
         raise SystemExit("UI is not built. Run `npm run build` in frontend/ first.")
@@ -128,13 +149,13 @@ def main() -> None:
     _wait_until_up(server)
 
     theme = _load_theme()
+    width, height = _initial_size()
     window = webview.create_window(
         "Job Pilot",
         f"http://127.0.0.1:{port}/",
-        width=1400,
-        height=860,
-        # Smallest size at which the header, filters, table and board all still fit unchanged.
-        min_size=(1120, 640),
+        width=width,
+        height=height,
+        min_size=MIN_SIZE,
         js_api=_Api(),
         background_color=BACKGROUND[_effective_theme(theme)],
     )

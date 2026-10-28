@@ -213,3 +213,58 @@ def test_side_migration_backfills_existing_jobs(tmp_path):
     con.commit()
     command.upgrade(cfg, "head")
     assert con.execute("SELECT side FROM job ORDER BY id").fetchall() == [("anadolu",), ("avrupa",), (None,)]
+
+
+def test_watchlist_add_and_list(client):
+    res = client.post(
+        "/api/companies",
+        json={
+            "name": "KUIS AI Center",
+            "kind": "research",
+            "website": "ai.ku.edu.tr",
+            "careers_url": "ai.ku.edu.tr/positions",
+            "linkedin_url": "https://www.linkedin.com/company/kuis-ai",
+        },
+    )
+    assert res.status_code == 201, res.text
+    org = res.json()
+    assert org["kind"] == "research"
+    assert org["website"] == "https://ai.ku.edu.tr"
+    assert org["careers_url"] == "https://ai.ku.edu.tr/positions"
+    assert org["watching"] and org["date_watched"]
+    assert org["openings"] is None and org["last_checked_at"] is None
+    assert org["logo_url"]
+
+    make_job(client, company="Not Watched Inc")
+    assert [c["name"] for c in client.get("/api/companies?watching=true").json()] == ["KUIS AI Center"]
+    assert len(client.get("/api/companies").json()) == 2
+
+
+def test_watching_existing_company_keeps_its_jobs_and_website(client):
+    job = make_job(client, company="Trendyol", company_website="trendyol.com")
+    assert job["company_watching"] is False
+    org = client.post("/api/companies", json={"name": "trendyol", "kind": "company"}).json()
+    assert org["id"] == job["company_id"]
+    assert org["website"] == "https://trendyol.com"
+    assert (org["job_count"], org["active_job_count"]) == (1, 1)
+    assert client.get(f"/api/jobs/{job['id']}").json()["company_watching"] is True
+
+
+def test_recording_a_check_stamps_the_date(client):
+    org = client.post("/api/companies", json={"name": "Getir"}).json()
+    res = client.patch(f"/api/companies/{org['id']}", json={"openings": "hiring"}).json()
+    assert res["openings"] == "hiring" and res["last_checked_at"]
+    res = client.patch(f"/api/companies/{org['id']}", json={"watching": False}).json()
+    assert res["watching"] is False
+
+
+def test_company_rename_conflict_and_delete_rules(client):
+    a = client.post("/api/companies", json={"name": "Alpha"}).json()
+    client.post("/api/companies", json={"name": "Beta"})
+    assert client.patch(f"/api/companies/{a['id']}", json={"name": "beta"}).status_code == 409
+    assert client.patch(f"/api/companies/{a['id']}", json={"name": "Alpha Labs"}).json()["name"] == "Alpha Labs"
+
+    job = make_job(client, company="Beta")
+    assert client.delete(f"/api/companies/{job['company_id']}").status_code == 409
+    assert client.delete(f"/api/companies/{a['id']}").status_code == 204
+    assert client.get(f"/api/companies/{a['id']}").status_code == 404

@@ -35,6 +35,7 @@ export interface Job {
   company: string;
   company_id: number;
   company_website: string | null;
+  company_watching: boolean;
   logo_url: string | null;
   title: string;
   url: string | null;
@@ -74,4 +75,42 @@ export type JobInput = {
   next_action: string | null;
   notes: string;
   status?: Status;
+};
+
+export const ORG_KINDS = ["company", "startup", "research", "university", "other"] as const;
+export type OrgKind = (typeof ORG_KINDS)[number];
+
+export const ORG_KIND_LABELS: Record<OrgKind, string> = {
+  company: "Company",
+  startup: "Startup",
+  research: "Research center",
+  university: "University",
+  other: "Other",
+};
+
+/** Result of the last check for open positions; null means never checked. */
+export type Openings = "hiring" | "none";
+
+export interface Company {
+  id: number;
+  name: string;
+  kind: OrgKind;
+  website: string | null;
+  careers_url: string | null;
+  linkedin_url: string | null;
+  notes: string;
+  watching: boolean;
+  date_watched: string | null;
+  openings: Openings | null;
+  last_checked_at: string | null;
+  logo_url: string | null;
+}
+
+export type CompanyInput = {
+  name: string;
+  kind: OrgKind;
+  website: string | null;
+  careers_url: string | null;
+  linkedin_url: string | null;
+  notes: string;
 };

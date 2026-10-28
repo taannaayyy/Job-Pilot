@@ -3,7 +3,7 @@ import { api } from "../api";
 import { fmtDateTime } from "../format";
 import { STATUS_LABELS, type Job, type JobDetail, type JobInput, type Status } from "../types";
 import { useClosing } from "../useClosing";
-import { CheckIcon, CloseIcon, ExternalIcon } from "./Icons";
+import { CheckIcon, CloseIcon, ExternalIcon, StarIcon } from "./Icons";
 import CompanyLogo from "./CompanyLogo";
 import JobFields from "./JobFields";
 import StatusSelect from "./StatusSelect";
@@ -13,6 +13,8 @@ interface Props {
   onClose: () => void;
   onSaved: (job: Job) => void;
   onDeleted: (id: number) => void;
+  /** The job's company was added to or removed from the watchlist. */
+  onWatchChanged: () => void;
 }
 
 function toInput(job: JobDetail): JobInput {
@@ -20,7 +22,7 @@ function toInput(job: JobDetail): JobInput {
   return { company, company_website, title, url, city, side, district, work_mode, source, next_action, notes };
 }
 
-export default function JobPanel({ jobId, onClose, onSaved, onDeleted }: Props) {
+export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchChanged }: Props) {
   const [job, setJob] = useState<JobDetail | null>(null);
   const [input, setInput] = useState<JobInput | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +104,24 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted }: Props) 
                   </div>
                 )}
               </div>
+              <button
+                type="button"
+                className={`watch-toggle ${job.company_watching ? "on" : ""}`}
+                title={job.company_watching ? "On your watchlist" : `Add ${job.company} to your watchlist`}
+                aria-pressed={job.company_watching}
+                onClick={async () => {
+                  try {
+                    await api.updateCompany(job.company_id, { watching: !job.company_watching });
+                    apply(await api.getJob(jobId), false);
+                    onWatchChanged();
+                  } catch (err) {
+                    setError((err as Error).message);
+                  }
+                }}
+              >
+                <StarIcon filled={job.company_watching} />
+                {job.company_watching ? "Watching" : "Watch"}
+              </button>
               <button type="button" className="icon" aria-label="Close" onClick={close}>
                 <CloseIcon />
               </button>

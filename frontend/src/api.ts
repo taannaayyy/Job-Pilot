@@ -1,4 +1,4 @@
-import type { Job, JobDetail, JobInput } from "./types";
+import type { Company, CompanyInput, Job, JobDetail, JobInput, Openings } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -27,4 +27,11 @@ export const api = {
   updateJob: (id: number, body: Partial<JobInput>) =>
     request<JobDetail>(`/jobs/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteJob: (id: number) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
+  listWatchlist: () => request<Company[]>("/companies?watching=true"),
+  createCompany: (body: CompanyInput) => request<Company>("/companies", { method: "POST", body: JSON.stringify(body) }),
+  updateCompany: (
+    id: number,
+    body: Partial<CompanyInput> & { watching?: boolean; openings?: Openings | null },
+  ) => request<Company>(`/companies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteCompany: (id: number) => request<void>(`/companies/${id}`, { method: "DELETE" }),
 };

@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from jobpilot.db import Base, UTCDateTime, utcnow
@@ -25,6 +25,23 @@ class WorkMode(StrEnum):
     ONSITE = "onsite"
 
 
+class OrgKind(StrEnum):
+    COMPANY = "company"
+    STARTUP = "startup"
+    RESEARCH = "research"
+    UNIVERSITY = "university"
+    OTHER = "other"
+
+
+class Openings(StrEnum):
+    HIRING = "hiring"
+    NONE = "none"
+
+
+# Jobs still going somewhere; counted as "active" on the watchlist.
+ACTIVE_STATUSES = {"inbox", "saved", "applied", "screening", "interview", "offer"}
+
+
 def company_key(name: str) -> str:
     return re.sub(r"\s+", " ", name).strip().casefold()
 
@@ -36,6 +53,17 @@ class Company(Base):
     name: Mapped[str] = mapped_column(String(200))
     name_key: Mapped[str] = mapped_column(String(200), unique=True)
     website: Mapped[str | None] = mapped_column(String(300))
+    # Companies, startups, research centers, universities: anything that might hire.
+    kind: Mapped[OrgKind] = mapped_column(String(20), default=OrgKind.COMPANY, server_default=OrgKind.COMPANY)
+    careers_url: Mapped[str | None] = mapped_column(String(1000))
+    linkedin_url: Mapped[str | None] = mapped_column(String(1000))
+    notes: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # On the watchlist. Companies are also created by jobs, which doesn't put them there.
+    watching: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    date_watched: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # Result of the last manual check for open positions; None means never checked.
+    openings: Mapped[Openings | None] = mapped_column(String(10))
+    last_checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     jobs: Mapped[list["Job"]] = relationship(back_populates="company")
 

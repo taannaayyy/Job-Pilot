@@ -4,42 +4,82 @@ import Board from "./components/Board";
 import JobForm from "./components/JobForm";
 import JobPanel from "./components/JobPanel";
 import JobTable from "./components/JobTable";
-import { AutoIcon, BoardIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon, TableIcon } from "./components/Icons";
+import { AutoIcon, BoardIcon, BriefcaseIcon, EyeIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon, TableIcon } from "./components/Icons";
+import OrgForm from "./components/OrgForm";
+import OrgPanel from "./components/OrgPanel";
 import Segmented from "./components/Segmented";
+import Watchlist from "./components/Watchlist";
 import { useTheme } from "./theme";
 import { SIDE_LABELS, matchesLocation, type LocationFilter } from "./locations";
-import { STATUSES, STATUS_LABELS, WORK_MODES, WORK_MODE_LABELS, type Job, type Status, type WorkMode } from "./types";
+import {
+  STATUSES,
+  STATUS_LABELS,
+  WORK_MODES,
+  WORK_MODE_LABELS,
+  type Company,
+  type Job,
+  type JobInput,
+  type Openings,
+  type Status,
+  type WorkMode,
+} from "./types";
 
 type View = "board" | "table";
+type Page = "jobs" | "watchlist";
 
 // Saved only when the user picks a view. (Renamed from "jobpilot.view", which older builds wrote on every launch.)
 const VIEW_KEY = "jobpilot.ui.view";
+const PAGE_KEY = "jobpilot.ui.page";
 
-/** Table is the default until the user picks a view. */
-function loadView(): View {
+function load<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
-    return localStorage.getItem(VIEW_KEY) === "board" ? "board" : "table";
+    const v = localStorage.getItem(key);
+    return allowed.includes(v as T) ? (v as T) : fallback;
   } catch {
-    return "table";
+    return fallback;
+  }
+}
+
+function save(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // per-viewer convenience only
   }
 }
 
 export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [orgs, setOrgs] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setViewState] = useState<View>(loadView);
+  // Table is the default until the user picks a view.
+  const [view, setViewState] = useState<View>(() => load(VIEW_KEY, ["board", "table"], "table"));
+  const [page, setPageState] = useState<Page>(() => load(PAGE_KEY, ["jobs", "watchlist"], "jobs"));
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [modeFilter, setModeFilter] = useState<WorkMode | "">("");
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("");
-  const [creating, setCreating] = useState(false);
+  // null: closed; otherwise the job form is open, prefilled with these fields.
+  const [newJob, setNewJob] = useState<Partial<JobInput> | null>(null);
+  const [creatingOrg, setCreatingOrg] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [openOrgId, setOpenOrgId] = useState<number | null>(null);
   const [theme, setTheme] = useTheme();
+
+  const refreshOrgs = useCallback(async () => {
+    try {
+      setOrgs(await api.listWatchlist());
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
-      setJobs(await api.listJobs());
+      const [j, o] = await Promise.all([api.listJobs(), api.listWatchlist()]);
+      setJobs(j);
+      setOrgs(o);
       setError(null);
     } catch (e) {
       setError(`Can't reach the backend: ${(e as Error).message}`);
@@ -54,11 +94,12 @@ export default function App() {
 
   const setView = useCallback((next: View) => {
     setViewState(next);
-    try {
-      localStorage.setItem(VIEW_KEY, next);
-    } catch {
-      // per-viewer convenience only
-    }
+    save(VIEW_KEY, next);
+  }, []);
+
+  const setPage = useCallback((next: Page) => {
+    setPageState(next);
+    save(PAGE_KEY, next);
   }, []);
 
   const filtered = useMemo(() => {
@@ -87,11 +128,37 @@ export default function App() {
     [refresh],
   );
 
-  const upsert = (job: Job) =>
+  const setOpenings = useCallback(async (id: number, openings: Openings) => {
+    try {
+      const updated = await api.updateCompany(id, { openings });
+      setOrgs((prev) => prev.map((o) => (o.id === id ? updated : o)));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  const upsertJob = (job: Job) => {
     setJobs((prev) => (prev.some((j) => j.id === job.id) ? prev.map((j) => (j.id === job.id ? job : j)) : [job, ...prev]));
+    // A job can change its company's name or website, which the watchlist shows too.
+    refreshOrgs();
+  };
+
+  const upsertOrg = (org: Company) => {
+    setOrgs((prev) =>
+      prev.some((o) => o.id === org.id) ? prev.map((o) => (o.id === org.id ? org : o)) : [...prev, org],
+    );
+    // Jobs show the company's name and logo.
+    api.listJobs().then(setJobs).catch(() => {});
+  };
+
+  const addJobAt = (org: Company) => {
+    setOpenOrgId(null);
+    setNewJob({ company: org.name, company_website: org.website });
+  };
 
   const applied = jobs.filter((j) => j.date_applied).length;
   const active = jobs.filter((j) => ["applied", "screening", "interview"].includes(j.status)).length;
+  const openOrg = orgs.find((o) => o.id === openOrgId) ?? null;
 
   return (
     <div className="app">
@@ -101,11 +168,21 @@ export default function App() {
             <BoardIcon />
           </span>
           <h1>Job Pilot</h1>
-          <div className="stats">
-            <span className="chip">{jobs.length} tracked</span>
-            <span className="chip">{applied} applied</span>
-            <span className="chip accent">{active} in progress</span>
-          </div>
+          <Segmented
+            ariaLabel="Page"
+            value={page}
+            onChange={setPage}
+            options={[
+              { value: "jobs", label: `Jobs · ${jobs.length}`, icon: <BriefcaseIcon /> },
+              { value: "watchlist", label: `Watchlist · ${orgs.length}`, icon: <EyeIcon /> },
+            ]}
+          />
+          {page === "jobs" && (
+            <div className="stats">
+              <span className="chip">{applied} applied</span>
+              <span className="chip accent">{active} in progress</span>
+            </div>
+          )}
         </div>
         <div className="topbar-actions">
           <Segmented
@@ -119,58 +196,67 @@ export default function App() {
               { value: "dark", label: "Night", icon: <MoonIcon /> },
             ]}
           />
-          <button className="primary" onClick={() => setCreating(true)}>
-            <PlusIcon />
-            Add job
-          </button>
+          {page === "jobs" ? (
+            <button className="primary" onClick={() => setNewJob({})}>
+              <PlusIcon />
+              Add job
+            </button>
+          ) : (
+            <button className="primary" onClick={() => setCreatingOrg(true)}>
+              <PlusIcon />
+              Add organization
+            </button>
+          )}
         </div>
       </header>
 
-      <div className="toolbar">
-        <Segmented
-          ariaLabel="View"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: "board", label: "Board", icon: <BoardIcon /> },
-            { value: "table", label: "Table", icon: <TableIcon /> },
-          ]}
-        />
-        <label className="search">
-          <SearchIcon />
-          <input
-            type="search"
-            placeholder="Search company, title or district"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+      {page === "jobs" && (
+        <div className="toolbar">
+          <Segmented
+            ariaLabel="View"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "table", label: "Table", icon: <TableIcon /> },
+              { value: "board", label: "Board", icon: <BoardIcon /> },
+            ]}
           />
-        </label>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as Status | "")}>
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value as WorkMode | "")}>
-          <option value="">Any work mode</option>
-          {WORK_MODES.map((m) => (
-            <option key={m} value={m}>
-              {WORK_MODE_LABELS[m]}
-            </option>
-          ))}
-        </select>
-        <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value as LocationFilter)}>
-          <option value="">Any location</option>
-          <optgroup label="Istanbul">
-            <option value="istanbul">All Istanbul</option>
-            <option value="anadolu">{SIDE_LABELS.anadolu}</option>
-            <option value="avrupa">{SIDE_LABELS.avrupa}</option>
-          </optgroup>
-          <option value="other">Other cities</option>
-        </select>
-      </div>
+          <label className="search">
+            <SearchIcon />
+            <input
+              type="search"
+              placeholder="Search company, title or district"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as Status | "")}>
+            <option value="">All statuses</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value as WorkMode | "")}>
+            <option value="">Any work mode</option>
+            {WORK_MODES.map((m) => (
+              <option key={m} value={m}>
+                {WORK_MODE_LABELS[m]}
+              </option>
+            ))}
+          </select>
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value as LocationFilter)}>
+            <option value="">Any location</option>
+            <optgroup label="Istanbul">
+              <option value="istanbul">All Istanbul</option>
+              <option value="anadolu">{SIDE_LABELS.anadolu}</option>
+              <option value="avrupa">{SIDE_LABELS.avrupa}</option>
+            </optgroup>
+            <option value="other">Other cities</option>
+          </select>
+        </div>
+      )}
 
       {error && (
         <div className="error banner" role="alert">
@@ -181,41 +267,85 @@ export default function App() {
         </div>
       )}
 
-      <main>
-        {loading ? (
+      {loading ? (
+        <main>
           <div className="empty">
             <span className="spinner" aria-label="Loading" />
           </div>
-        ) : jobs.length === 0 ? (
-          <div className="empty hero">
-            <span className="logo big" aria-hidden>
-              <BoardIcon />
-            </span>
-            <p>No jobs yet. Add the first one you are looking at.</p>
-            <button className="primary" onClick={() => setCreating(true)}>
-              Add your first job
-            </button>
-          </div>
-        ) : view === "board" ? (
-          <Board
-            jobs={filtered}
-            showInbox={jobs.some((j) => j.status === "inbox")}
-            statusFilter={statusFilter}
-            onOpen={setOpenId}
-            onStatusChange={changeStatus}
-          />
-        ) : (
-          <JobTable jobs={filtered} onOpen={setOpenId} onStatusChange={changeStatus} />
-        )}
-      </main>
+        </main>
+      ) : page === "watchlist" ? (
+        <Watchlist
+          orgs={orgs}
+          jobs={jobs}
+          onOpen={setOpenOrgId}
+          onAdd={() => setCreatingOrg(true)}
+          onAddJob={addJobAt}
+          onSetOpenings={setOpenings}
+        />
+      ) : (
+        <main>
+          {jobs.length === 0 ? (
+            <div className="empty hero">
+              <span className="logo big" aria-hidden>
+                <BoardIcon />
+              </span>
+              <p>No jobs yet. Add the first one you are looking at.</p>
+              <button className="primary" onClick={() => setNewJob({})}>
+                Add your first job
+              </button>
+            </div>
+          ) : view === "board" ? (
+            <Board
+              jobs={filtered}
+              showInbox={jobs.some((j) => j.status === "inbox")}
+              statusFilter={statusFilter}
+              onOpen={setOpenId}
+              onStatusChange={changeStatus}
+            />
+          ) : (
+            <JobTable jobs={filtered} onOpen={setOpenId} onStatusChange={changeStatus} />
+          )}
+        </main>
+      )}
 
-      {creating && (
+      {newJob && (
         <JobForm
-          onCancel={() => setCreating(false)}
+          initial={newJob}
+          onCancel={() => setNewJob(null)}
           onSubmit={async (input) => {
-            upsert(await api.createJob(input));
-            setCreating(false);
+            upsertJob(await api.createJob(input));
+            setNewJob(null);
           }}
+        />
+      )}
+
+      {creatingOrg && (
+        <OrgForm
+          onCancel={() => setCreatingOrg(false)}
+          onSubmit={async (input) => {
+            upsertOrg(await api.createCompany(input));
+            setCreatingOrg(false);
+          }}
+        />
+      )}
+
+      {openOrg && (
+        <OrgPanel
+          key={openOrg.id}
+          org={openOrg}
+          jobs={jobs.filter((j) => j.company_id === openOrg.id)}
+          onClose={() => setOpenOrgId(null)}
+          onSaved={upsertOrg}
+          onRemoved={(id) => {
+            setOrgs((prev) => prev.filter((o) => o.id !== id));
+            setOpenOrgId(null);
+            api.listJobs().then(setJobs).catch(() => {});
+          }}
+          onOpenJob={(id) => {
+            setOpenOrgId(null);
+            setOpenId(id);
+          }}
+          onAddJob={addJobAt}
         />
       )}
 
@@ -223,13 +353,15 @@ export default function App() {
         <JobPanel
           jobId={openId}
           onClose={() => setOpenId(null)}
-          onSaved={upsert}
+          onSaved={upsertJob}
           onDeleted={(id) => {
             setJobs((prev) => prev.filter((j) => j.id !== id));
             setOpenId(null);
           }}
+          onWatchChanged={refreshOrgs}
         />
       )}
     </div>
   );
 }
+
