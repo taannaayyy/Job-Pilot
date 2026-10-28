@@ -133,7 +133,8 @@ def main() -> None:
         f"http://127.0.0.1:{port}/",
         width=1400,
         height=860,
-        min_size=(720, 500),
+        # Smallest size at which the header, filters, table and board all still fit unchanged.
+        min_size=(1120, 640),
         js_api=_Api(),
         background_color=BACKGROUND[_effective_theme(theme)],
     )

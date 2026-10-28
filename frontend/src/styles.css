@@ -106,7 +106,10 @@
 /* ---------- base ---------- */
 
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+/* The window itself never scrolls or bounces like a web page; only main, the table
+   and the panels scroll, and reaching their end doesn't hand the scroll to the window. */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+main, .table-wrap, .panel, .modal, textarea { overscroll-behavior: contain; }
 body {
   margin: 0;
   background:
@@ -381,7 +384,7 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
 .board { display: flex; gap: 12px; align-items: flex-start; min-height: 100%; }
 .column {
   flex: 1 1 0;
-  min-width: 180px;
+  min-width: 140px;
   max-width: 320px;
   background: color-mix(in srgb, var(--surface-2) 80%, transparent);
   border: 1.5px solid transparent;
@@ -526,7 +529,8 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
     box-shadow: 0 0 0 1px hsl(var(--hue) 30% 30%);
   }
 }
-.company-cell { display: inline-flex; align-items: center; gap: 9px; }
+.company-cell { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .panel-head .logo-img, .panel-head .logo-initials { border-radius: 12px; margin-top: 2px; }
 .panel-title { flex: 1; min-width: 0; }
 
@@ -543,8 +547,16 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
   box-shadow: var(--shadow-sm);
   animation: rise 0.4s var(--ease-out) both;
 }
-table { border-collapse: collapse; width: 100%; }
-th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+th, td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+td .status-select { max-width: 100%; }
 th {
   font-size: 11px;
   text-transform: uppercase;

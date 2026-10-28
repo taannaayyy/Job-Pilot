@@ -7,15 +7,17 @@ import StatusSelect from "./StatusSelect";
 
 type SortKey = "company" | "title" | "status" | "date_saved" | "date_applied";
 
-const COLUMNS: { key: SortKey | null; label: string }[] = [
-  { key: "company", label: "Company" },
-  { key: "title", label: "Role" },
-  { key: "status", label: "Status" },
-  { key: null, label: "Mode" },
-  { key: null, label: "Location" },
-  { key: null, label: "Source" },
-  { key: "date_saved", label: "Saved" },
-  { key: "date_applied", label: "Applied" },
+// Fixed column widths: long text is cut off with "…" instead of widening the table,
+// so the layout stays the same at any window size. The last column takes the rest.
+const COLUMNS: { key: SortKey | null; label: string; width?: string }[] = [
+  { key: "company", label: "Company", width: "14%" },
+  { key: "title", label: "Role", width: "17%" },
+  { key: "status", label: "Status", width: "128px" },
+  { key: null, label: "Mode", width: "80px" },
+  { key: null, label: "Location", width: "12%" },
+  { key: null, label: "Source", width: "8%" },
+  { key: "date_saved", label: "Saved", width: "90px" },
+  { key: "date_applied", label: "Applied", width: "92px" },
   { key: null, label: "Next action" },
 ];
 
@@ -41,6 +43,11 @@ export default function JobTable({ jobs, onOpen, onStatusChange }: Props) {
   return (
     <div className="table-wrap">
       <table>
+        <colgroup>
+          {COLUMNS.map(({ label, width }) => (
+            <col key={label} style={width ? { width } : undefined} />
+          ))}
+        </colgroup>
         <thead>
           <tr>
             {COLUMNS.map(({ key, label }) => (
@@ -62,21 +69,23 @@ export default function JobTable({ jobs, onOpen, onStatusChange }: Props) {
           {sorted.map((job) => (
             <tr key={job.id} onClick={() => onOpen(job.id)}>
               <td className="strong">
-                <span className="company-cell">
+                <span className="company-cell" title={job.company}>
                   <CompanyLogo name={job.company} logoUrl={job.logo_url} size={22} />
-                  {job.company}
+                  <span className="truncate">{job.company}</span>
                 </span>
               </td>
-              <td>{job.title}</td>
+              <td title={job.title}>{job.title}</td>
               <td>
                 <StatusSelect value={job.status} onChange={(s) => onStatusChange(job.id, s)} />
               </td>
               <td>{job.work_mode ? WORK_MODE_LABELS[job.work_mode] : "—"}</td>
-              <td>{locationLabel(job) ?? "—"}</td>
-              <td>{job.source || "—"}</td>
+              <td title={locationLabel(job) ?? undefined}>{locationLabel(job) ?? "—"}</td>
+              <td title={job.source ?? undefined}>{job.source || "—"}</td>
               <td className="num">{fmtDate(job.date_saved)}</td>
               <td className="num">{fmtDate(job.date_applied)}</td>
-              <td className="muted">{job.next_action || "—"}</td>
+              <td className="muted" title={job.next_action ?? undefined}>
+                {job.next_action || "—"}
+              </td>
             </tr>
           ))}
         </tbody>
