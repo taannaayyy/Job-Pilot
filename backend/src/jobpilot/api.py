@@ -1,10 +1,13 @@
 from collections.abc import Iterator
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from jobpilot.db import utcnow
+from jobpilot.logos import domain_of, sniff_media_type
 from jobpilot.models import Company, Job, JobStatus, StatusEvent, WorkMode, company_key
 from jobpilot.schemas import JobCreate, JobDetail, JobOut, JobUpdate
 
@@ -37,9 +40,16 @@ def _set_status(job: Job, status: JobStatus) -> None:
         job.date_applied = utcnow()
 
 
+COMPUTED = {"company", "company_website", "logo_url", "events"}
+
+
 def _to_out(job: Job, model: type[JobOut] = JobOut) -> JobOut:
-    data = {f: getattr(job, f) for f in model.model_fields if f not in ("company", "events")}
+    data = {f: getattr(job, f) for f in model.model_fields if f not in COMPUTED}
+    website = job.company.website
     data["company"] = job.company.name
+    data["company_website"] = website
+    # The domain in the query string makes the browser refetch when the website changes.
+    data["logo_url"] = f"/api/companies/{job.company_id}/logo?d={quote(domain_of(website))}" if website else None
     if "events" in model.model_fields:
         data["events"] = job.events
     return model.model_validate(data)
@@ -66,14 +76,19 @@ def list_jobs(
         stmt = stmt.where(Job.work_mode == work_mode)
     if q:
         like = f"%{q.strip()}%"
-        stmt = stmt.where(or_(Job.title.ilike(like), Company.name.ilike(like)))
+        stmt = stmt.where(
+            or_(Job.title.ilike(like), Company.name.ilike(like), Job.city.ilike(like), Job.district.ilike(like))
+        )
     return [_to_out(j) for j in session.scalars(stmt).unique()]
 
 
 @router.post("/jobs", response_model=JobDetail, status_code=201)
 def create_job(body: JobCreate, session: Session = Depends(get_session)):
-    fields = body.model_dump(exclude={"company", "status"}, mode="json")
-    job = Job(company=_get_or_create_company(session, body.company), **fields)
+    fields = body.model_dump(exclude={"company", "company_website", "status"}, mode="json")
+    company = _get_or_create_company(session, body.company)
+    if body.company_website:  # a blank website never erases one already known for the company
+        company.website = body.company_website
+    job = Job(company=company, **fields)
     _set_status(job, body.status)
     session.add(job)
     session.commit()
@@ -91,6 +106,8 @@ def update_job(job_id: int, body: JobUpdate, session: Session = Depends(get_sess
     changes = body.model_dump(exclude_unset=True, mode="json")
     if "company" in changes:
         job.company = _get_or_create_company(session, changes.pop("company"))
+    if "company_website" in changes:
+        job.company.website = changes.pop("company_website")
     if "status" in changes:
         status = changes.pop("status")
         if status is not None:
@@ -108,3 +125,14 @@ def delete_job(job_id: int, session: Session = Depends(get_session)):
     session.delete(_get_job(session, job_id))
     session.commit()
     return Response(status_code=204)
+
+
+@router.get("/companies/{company_id}/logo")
+def company_logo(company_id: int, request: Request, session: Session = Depends(get_session)):
+    company = session.get(Company, company_id)
+    if company is None or not company.website:
+        raise HTTPException(404, "No logo")
+    data = request.app.state.logos.get(domain_of(company.website))
+    if data is None:
+        raise HTTPException(404, "No logo", headers={"Cache-Control": "max-age=3600"})
+    return Response(data, media_type=sniff_media_type(data), headers={"Cache-Control": "max-age=86400"})

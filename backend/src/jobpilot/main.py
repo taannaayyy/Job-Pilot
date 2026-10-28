@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from jobpilot import config
 from jobpilot.api import router
 from jobpilot.db import make_engine, make_sessionmaker
+from jobpilot.logos import LogoCache
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 # Built UI (`npm run build` in frontend/). Absent during development, where Vite serves it.
@@ -28,6 +29,7 @@ def create_app(db_file: Path | None = None) -> FastAPI:
 
     app = FastAPI(title="Job Pilot")
     app.state.sessionmaker = make_sessionmaker(engine)
+    app.state.logos = LogoCache(db_file.parent / "logos")
     app.include_router(router)
     if WEB_DIR.is_dir():
         app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

@@ -70,7 +70,8 @@ def _add_standard_menus() -> None:
     app.setWindowsMenu_(window_menu)
 
 
-THEME_FILE = config.APP_SUPPORT_DIR / "theme.json"
+# Renamed from theme.json, which older builds wrote on every launch.
+THEME_FILE = config.APP_SUPPORT_DIR / "ui-theme.json"
 # Window background before the page paints; matches --bg in styles.css.
 BACKGROUND = {"light": "#F5F6F8", "dark": "#0F1115"}
 
@@ -79,7 +80,7 @@ def _load_theme() -> str:
     try:
         return json.loads(THEME_FILE.read_text())["mode"]
     except (OSError, ValueError, KeyError):
-        return "system"
+        return "dark"  # night mode until the user picks a theme
 
 
 def _effective_theme(mode: str) -> str:

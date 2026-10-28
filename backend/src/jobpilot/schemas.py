@@ -1,15 +1,31 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+
+from jobpilot.logos import normalize_website
 
 from jobpilot.models import JobStatus, WorkMode
 
 
-class JobCreate(BaseModel):
+class _JobFields(BaseModel):
+    @field_validator("company_website", mode="before", check_fields=False)
+    @classmethod
+    def _website(cls, v):
+        return normalize_website(v) if isinstance(v, str) or v is None else v
+
+    @field_validator("city", "district", "source", "next_action", mode="before", check_fields=False)
+    @classmethod
+    def _blank_to_none(cls, v):
+        return v.strip() or None if isinstance(v, str) else v
+
+
+class JobCreate(_JobFields):
     company: str = Field(min_length=1, max_length=200)
+    company_website: str | None = None
     title: str = Field(min_length=1, max_length=300)
     url: HttpUrl | None = None
-    location: str | None = None
+    city: str | None = Field(default=None, max_length=100)
+    district: str | None = Field(default=None, max_length=100)
     work_mode: WorkMode | None = None
     source: str | None = None
     status: JobStatus = JobStatus.SAVED
@@ -17,13 +33,15 @@ class JobCreate(BaseModel):
     notes: str = ""
 
 
-class JobUpdate(BaseModel):
+class JobUpdate(_JobFields):
     """All fields optional; only fields present in the request are changed."""
 
     company: str | None = Field(default=None, min_length=1, max_length=200)
+    company_website: str | None = None
     title: str | None = Field(default=None, min_length=1, max_length=300)
     url: HttpUrl | None = None
-    location: str | None = None
+    city: str | None = Field(default=None, max_length=100)
+    district: str | None = Field(default=None, max_length=100)
     work_mode: WorkMode | None = None
     source: str | None = None
     status: JobStatus | None = None
@@ -45,9 +63,13 @@ class JobOut(BaseModel):
 
     id: int
     company: str
+    company_id: int
+    company_website: str | None
+    logo_url: str | None
     title: str
     url: str | None
-    location: str | None
+    city: str | None
+    district: str | None
     work_mode: WorkMode | None
     source: str | None
     status: JobStatus

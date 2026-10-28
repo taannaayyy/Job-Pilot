@@ -5,11 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Job Pilot</title>
     <script>
-      // Apply the saved theme before first paint so the page never flashes the wrong colors.
+      // Apply the saved theme (night by default) before first paint so the page never flashes the wrong colors.
       try {
-        const t = localStorage.getItem("jobpilot.theme");
-        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
-      } catch {}
+        const t = localStorage.getItem("jobpilot.ui.theme");
+        if (t === "light") document.documentElement.dataset.theme = "light";
+        else if (t !== "system") document.documentElement.dataset.theme = "dark";
+      } catch {
+        document.documentElement.dataset.theme = "dark";
+      }
     </script>
   </head>
   <body>

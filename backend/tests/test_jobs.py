@@ -99,3 +99,72 @@ def test_serves_built_ui(client):
     assert res.status_code == 200
     assert "<div id=\"root\">" in res.text
     assert client.get("/api/jobs").status_code == 200
+
+
+def test_city_and_district(client):
+    job = make_job(client, city="Istanbul", district="Kadıköy")
+    assert (job["city"], job["district"]) == ("Istanbul", "Kadıköy")
+    res = client.patch(f"/api/jobs/{job['id']}", json={"city": "  ", "district": None}).json()
+    assert (res["city"], res["district"]) == (None, None)
+    make_job(client, company="Other", city="Ankara")
+    assert [j["company"] for j in client.get("/api/jobs?q=ankara").json()] == ["Other"]
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("insider.com", "https://insider.com"),
+        ("https://www.Insider.com/careers?x=1", "https://insider.com"),
+        ("http://jobs.trendyol.com", "https://jobs.trendyol.com"),
+        ("", None),
+    ],
+)
+def test_website_is_normalized(client, raw, expected):
+    job = make_job(client, company_website=raw)
+    assert job["company_website"] == expected
+    assert (job["logo_url"] is None) == (expected is None)
+
+
+def test_invalid_website_rejected(client):
+    assert client.post("/api/jobs", json={"company": "A", "title": "x", "company_website": "not a site"}).status_code == 422
+
+
+def test_blank_website_keeps_company_website(client):
+    make_job(client, company_website="acme.ai")
+    job = make_job(client, title="Data Scientist")
+    assert job["company_website"] == "https://acme.ai"
+
+
+def test_logo_is_fetched_once_and_cached(client):
+    calls = []
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 50
+
+    def fake_fetch(domain):
+        calls.append(domain)
+        return png if domain == "acme.ai" else None
+
+    client.app.state.logos.fetch = fake_fetch
+    job = make_job(client, company_website="acme.ai")
+    for _ in range(2):
+        res = client.get(job["logo_url"])
+        assert res.status_code == 200
+        assert res.headers["content-type"] == "image/png"
+    assert calls == ["acme.ai"]
+
+    other = make_job(client, company="Nologo", company_website="nologo.dev")
+    assert client.get(other["logo_url"]).status_code == 404
+    assert client.get(other["logo_url"]).status_code == 404
+    assert calls == ["acme.ai", "nologo.dev"]
+
+    plain = make_job(client, company="Plain")
+    assert client.get(f"/api/companies/{plain['company_id']}/logo").status_code == 404
+
+
+def test_migration_splits_old_location():
+    import importlib
+
+    m = importlib.import_module("jobpilot.migrations.versions.78178a8c7016_company_website_and_city_district")
+    assert m._split_location("Istanbul, Pendik ") == ("Istanbul", "Pendik")
+    assert m._split_location("kadikoy") == ("Istanbul", "Kadıköy")
+    assert m._split_location("İstanbul") == ("Istanbul", None)
+    assert m._split_location("Ankara") == ("Ankara", None)

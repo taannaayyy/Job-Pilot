@@ -134,6 +134,7 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px var(--ring);
 }
 textarea { resize: vertical; line-height: 1.5; }
+input:not([type="checkbox"]):not([type="radio"]), select { height: 34px; }
 select { cursor: pointer; }
 
 /* ---------- buttons ---------- */
@@ -454,7 +455,18 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
 .card:active { cursor: grabbing; }
 .card:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
 .card.dragging { opacity: 0.35; transform: scale(0.97) rotate(-1deg); }
-.card-company { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.card-company {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 0;
+}
+.card-company > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-title { font-weight: 600; margin: 3px 0 4px; line-height: 1.3; }
 .card-meta { color: var(--muted); font-size: 12px; }
 .card-next {
@@ -477,6 +489,49 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
   min-height: 24px;
 }
 .card-foot button { flex-shrink: 0; }
+
+/* ---------- company logos ---------- */
+
+.logo-img,
+.logo-initials {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 28%;
+  overflow: hidden;
+  letter-spacing: 0;
+  text-transform: none;
+  animation: fade-in 0.3s ease both;
+}
+.logo-img {
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.logo-img img { width: 82%; height: 82%; object-fit: contain; }
+.logo-initials {
+  font-weight: 700;
+  color: hsl(var(--hue) 55% 38%);
+  background: hsl(var(--hue) 70% 92%);
+  box-shadow: 0 0 0 1px hsl(var(--hue) 40% 82%);
+}
+:root[data-theme="dark"] .logo-initials {
+  color: hsl(var(--hue) 70% 78%);
+  background: hsl(var(--hue) 35% 22%);
+  box-shadow: 0 0 0 1px hsl(var(--hue) 30% 30%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .logo-initials {
+    color: hsl(var(--hue) 70% 78%);
+    background: hsl(var(--hue) 35% 22%);
+    box-shadow: 0 0 0 1px hsl(var(--hue) 30% 30%);
+  }
+}
+.company-cell { display: inline-flex; align-items: center; gap: 9px; }
+.panel-head .logo-img, .panel-head .logo-initials { border-radius: 12px; margin-top: 2px; }
+.panel-title { flex: 1; min-width: 0; }
+
+/* Reveals the district / city-name field when the city choice changes. */
+.reveal { animation: rise 0.25s var(--ease-out) both; }
 
 /* ---------- table ---------- */
 
@@ -553,6 +608,18 @@ td.num { font-variant-numeric: tabular-nums; }
 .overlay.closing .panel { animation: slide-out 0.22s ease-in both; }
 .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .panel-head h2 { font-size: 21px; margin: 3px 0 6px; letter-spacing: -0.01em; }
+.external-links { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.external-links .external + .external { position: relative; }
+.external-links .external + .external::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--muted);
+}
 .external { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
 .external svg { transition: transform 0.2s var(--ease-out); }
 .external:hover svg { transform: translate(2px, -2px); }

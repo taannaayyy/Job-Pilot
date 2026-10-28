@@ -35,6 +35,7 @@ class Company(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     name_key: Mapped[str] = mapped_column(String(200), unique=True)
+    website: Mapped[str | None] = mapped_column(String(300))
 
     jobs: Mapped[list["Job"]] = relationship(back_populates="company")
 
@@ -46,7 +47,9 @@ class Job(Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("company.id"), index=True)
     title: Mapped[str] = mapped_column(String(300))
     url: Mapped[str | None] = mapped_column(String(1000))
-    location: Mapped[str | None] = mapped_column(String(200))
+    city: Mapped[str | None] = mapped_column(String(100))
+    # Only for Istanbul; the Anadolu/Avrupa side is derived from it in the UI.
+    district: Mapped[str | None] = mapped_column(String(100))
     work_mode: Mapped[WorkMode | None] = mapped_column(String(20))
     source: Mapped[str | None] = mapped_column(String(100))
     status: Mapped[JobStatus] = mapped_column(String(20), default=JobStatus.SAVED, index=True)

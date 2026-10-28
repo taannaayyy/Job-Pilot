@@ -7,17 +7,20 @@ import JobTable from "./components/JobTable";
 import { AutoIcon, BoardIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon, TableIcon } from "./components/Icons";
 import Segmented from "./components/Segmented";
 import { useTheme } from "./theme";
+import { SIDE_LABELS, matchesLocation, type LocationFilter } from "./locations";
 import { STATUSES, STATUS_LABELS, WORK_MODES, WORK_MODE_LABELS, type Job, type Status, type WorkMode } from "./types";
 
 type View = "board" | "table";
 
-const VIEW_KEY = "jobpilot.view";
+// Saved only when the user picks a view. (Renamed from "jobpilot.view", which older builds wrote on every launch.)
+const VIEW_KEY = "jobpilot.ui.view";
 
+/** Table is the default until the user picks a view. */
 function loadView(): View {
   try {
-    return localStorage.getItem(VIEW_KEY) === "table" ? "table" : "board";
+    return localStorage.getItem(VIEW_KEY) === "board" ? "board" : "table";
   } catch {
-    return "board";
+    return "table";
   }
 }
 
@@ -25,10 +28,11 @@ export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<View>(loadView);
+  const [view, setViewState] = useState<View>(loadView);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [modeFilter, setModeFilter] = useState<WorkMode | "">("");
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>("");
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [theme, setTheme] = useTheme();
@@ -48,23 +52,26 @@ export default function App() {
     refresh();
   }, [refresh]);
 
-  useEffect(() => {
+  const setView = useCallback((next: View) => {
+    setViewState(next);
     try {
-      localStorage.setItem(VIEW_KEY, view);
+      localStorage.setItem(VIEW_KEY, next);
     } catch {
       // per-viewer convenience only
     }
-  }, [view]);
+  }, []);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim().toLocaleLowerCase("tr");
     return jobs.filter(
       (j) =>
         (!statusFilter || j.status === statusFilter) &&
         (!modeFilter || j.work_mode === modeFilter) &&
-        (!q || j.company.toLowerCase().includes(q) || j.title.toLowerCase().includes(q)),
+        matchesLocation(j, locationFilter) &&
+        (!q ||
+          [j.company, j.title, j.city, j.district].some((v) => v?.toLocaleLowerCase("tr").includes(q))),
     );
-  }, [jobs, query, statusFilter, modeFilter]);
+  }, [jobs, query, statusFilter, modeFilter, locationFilter]);
 
   const changeStatus = useCallback(
     async (id: number, status: Status) => {
@@ -133,7 +140,7 @@ export default function App() {
           <SearchIcon />
           <input
             type="search"
-            placeholder="Search company or title"
+            placeholder="Search company, title or district"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -153,6 +160,15 @@ export default function App() {
               {WORK_MODE_LABELS[m]}
             </option>
           ))}
+        </select>
+        <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value as LocationFilter)}>
+          <option value="">Any location</option>
+          <optgroup label="Istanbul">
+            <option value="istanbul">All Istanbul</option>
+            <option value="anadolu">{SIDE_LABELS.anadolu}</option>
+            <option value="avrupa">{SIDE_LABELS.avrupa}</option>
+          </optgroup>
+          <option value="other">Other cities</option>
         </select>
       </div>
 

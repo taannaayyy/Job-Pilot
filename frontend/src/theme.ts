@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type Theme = "system" | "light" | "dark";
 
-const KEY = "jobpilot.theme";
+// Saved only when the user picks a theme. (Renamed from "jobpilot.theme", which older builds wrote on every launch.)
+export const THEME_KEY = "jobpilot.ui.theme";
 
 declare global {
   interface Window {
@@ -10,12 +11,13 @@ declare global {
   }
 }
 
+/** Night is the default until the user picks a theme. */
 function load(): Theme {
   try {
-    const t = localStorage.getItem(KEY);
-    return t === "light" || t === "dark" ? t : "system";
+    const t = localStorage.getItem(THEME_KEY);
+    return t === "light" || t === "system" ? t : "dark";
   } catch {
-    return "system";
+    return "dark";
   }
 }
 
@@ -27,7 +29,16 @@ function syncNative(theme: Theme) {
 }
 
 export function useTheme(): [Theme, (t: Theme) => void] {
-  const [theme, setTheme] = useState<Theme>(load);
+  const [theme, setThemeState] = useState<Theme>(load);
+
+  const setTheme = useCallback((next: Theme) => {
+    setThemeState(next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // per-viewer convenience only
+    }
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -36,11 +47,6 @@ export function useTheme(): [Theme, (t: Theme) => void] {
     if (theme === "system") delete root.dataset.theme;
     else root.dataset.theme = theme;
     const t = setTimeout(() => root.classList.remove("theme-switching"), 350);
-    try {
-      localStorage.setItem(KEY, theme);
-    } catch {
-      // per-viewer convenience only
-    }
     syncNative(theme);
     return () => clearTimeout(t);
   }, [theme]);

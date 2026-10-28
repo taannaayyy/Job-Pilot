@@ -33,9 +33,13 @@ export const WORK_MODE_LABELS: Record<WorkMode, string> = {
 export interface Job {
   id: number;
   company: string;
+  company_id: number;
+  company_website: string | null;
+  logo_url: string | null;
   title: string;
   url: string | null;
-  location: string | null;
+  city: string | null;
+  district: string | null;
   work_mode: WorkMode | null;
   source: string | null;
   status: Status;
@@ -58,9 +62,11 @@ export interface JobDetail extends Job {
 
 export type JobInput = {
   company: string;
+  company_website: string | null;
   title: string;
   url: string | null;
-  location: string | null;
+  city: string | null;
+  district: string | null;
   work_mode: WorkMode | null;
   source: string | null;
   next_action: string | null;

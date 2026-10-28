@@ -7,8 +7,10 @@ A local, single-user macOS app for tracking job applications. Everything stays o
 - **Board and table views.** Use the kanban board with drag and drop, or a sortable table.
 - **Statuses.** A job moves through Saved, Applied, Screening, Interview, Offer, Rejected and Ghosted.
 - **Automatic applied date.** It is stamped the first time a job moves to Applied or a later stage.
-- **Status history** for every job, plus notes, a next action, the job URL, location, work mode and source.
-- **Search and filters.** Search by company or title, and filter by status and work mode.
+- **Status history** for every job, plus notes, a next action, the job URL, work mode and source.
+- **Company logos.** Add a company's website and its logo appears next to the name. Companies without a website get a colored badge with their initials. Each logo is downloaded once and saved on your Mac.
+- **Istanbul locations.** City defaults to Istanbul. Pick a district from a menu grouped by Anadolu Yakası and Avrupa Yakası, or choose "Other city" and type it.
+- **Search and filters.** Search by company, title or district, and filter by status, work mode and location (Anadolu, Avrupa or other cities).
 - **Company deduplication.** "Acme AI" and "acme ai" count as the same company.
 - **Light, night and system themes.** The native title bar follows the theme.
 - **Native macOS window** with the usual shortcuts.
@@ -53,7 +55,9 @@ Jobs are stored in:
 ~/Library/Application Support/JobPilot/jobpilot.db
 ```
 
-To back up, copy that file. The app and the development server both use this same file. To use a different one, set `JOBPILOT_DB=/path/to/other.db`.
+Downloaded company logos are kept in the `logos` folder next to it and are downloaded again if deleted.
+
+To back up, copy `jobpilot.db`. The app and the development server both use this same file. To use a different one, set `JOBPILOT_DB=/path/to/other.db`.
 
 ## Development
 
@@ -108,6 +112,7 @@ The icon is drawn in `packaging/icon.svg`. After editing it, run `./packaging/ma
 backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
   src/jobpilot/
     api.py               REST endpoints under /api
+    logos.py             Fetches and caches company logos
     models.py            Database tables
     desktop.py           Native window, menus, title bar theme
     migrations/          Alembic migrations
@@ -115,6 +120,7 @@ backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
 frontend/                React + TypeScript + Vite
   src/
     App.tsx              Main screen, filters, theme switch
+    locations.ts         Istanbul districts by side
     components/          Board, table, form, detail panel
     styles.css           Themes and animations
 packaging/               PyInstaller spec, build script, icon

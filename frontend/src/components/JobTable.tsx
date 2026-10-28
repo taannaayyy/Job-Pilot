@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { fmtDate } from "../format";
 import { STATUSES, WORK_MODE_LABELS, type Job, type Status } from "../types";
+import { locationLabel } from "../locations";
+import CompanyLogo from "./CompanyLogo";
 import StatusSelect from "./StatusSelect";
 
 type SortKey = "company" | "title" | "status" | "date_saved" | "date_applied";
@@ -59,13 +61,18 @@ export default function JobTable({ jobs, onOpen, onStatusChange }: Props) {
         <tbody>
           {sorted.map((job) => (
             <tr key={job.id} onClick={() => onOpen(job.id)}>
-              <td className="strong">{job.company}</td>
+              <td className="strong">
+                <span className="company-cell">
+                  <CompanyLogo name={job.company} logoUrl={job.logo_url} size={22} />
+                  {job.company}
+                </span>
+              </td>
               <td>{job.title}</td>
               <td>
                 <StatusSelect value={job.status} onChange={(s) => onStatusChange(job.id, s)} />
               </td>
               <td>{job.work_mode ? WORK_MODE_LABELS[job.work_mode] : "—"}</td>
-              <td>{job.location || "—"}</td>
+              <td>{locationLabel(job) ?? "—"}</td>
               <td>{job.source || "—"}</td>
               <td className="num">{fmtDate(job.date_saved)}</td>
               <td className="num">{fmtDate(job.date_applied)}</td>

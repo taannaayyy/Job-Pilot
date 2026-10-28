@@ -4,6 +4,7 @@ import { fmtDateTime } from "../format";
 import { STATUS_LABELS, type Job, type JobDetail, type JobInput, type Status } from "../types";
 import { useClosing } from "../useClosing";
 import { CheckIcon, CloseIcon, ExternalIcon } from "./Icons";
+import CompanyLogo from "./CompanyLogo";
 import JobFields from "./JobFields";
 import StatusSelect from "./StatusSelect";
 
@@ -15,8 +16,8 @@ interface Props {
 }
 
 function toInput(job: JobDetail): JobInput {
-  const { company, title, url, location, work_mode, source, next_action, notes } = job;
-  return { company, title, url, location, work_mode, source, next_action, notes };
+  const { company, company_website, title, url, city, district, work_mode, source, next_action, notes } = job;
+  return { company, company_website, title, url, city, district, work_mode, source, next_action, notes };
 }
 
 export default function JobPanel({ jobId, onClose, onSaved, onDeleted }: Props) {
@@ -82,13 +83,23 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted }: Props) 
             }}
           >
             <header className="panel-head">
-              <div>
+              <CompanyLogo name={job.company} logoUrl={job.logo_url} size={44} />
+              <div className="panel-title">
                 <div className="card-company">{job.company}</div>
                 <h2>{job.title}</h2>
-                {job.url && (
-                  <a className="external" href={job.url} target="_blank" rel="noreferrer">
-                    Open posting <ExternalIcon />
-                  </a>
+                {(job.url || job.company_website) && (
+                  <div className="external-links">
+                    {job.url && (
+                      <a className="external" href={job.url} target="_blank" rel="noreferrer">
+                        Open posting <ExternalIcon />
+                      </a>
+                    )}
+                    {job.company_website && (
+                      <a className="external" href={job.company_website} target="_blank" rel="noreferrer">
+                        Company website <ExternalIcon />
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
               <button type="button" className="icon" aria-label="Close" onClick={close}>

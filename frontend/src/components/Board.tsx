@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { fmtDate } from "../format";
+import { locationLabel } from "../locations";
+import CompanyLogo from "./CompanyLogo";
 import { CheckIcon } from "./Icons";
 import { STATUSES, STATUS_LABELS, WORK_MODE_LABELS, type Job, type Status } from "../types";
 
@@ -62,10 +64,13 @@ export default function Board({ jobs, showInbox, statusFilter, onOpen, onStatusC
                   onClick={() => onOpen(job.id)}
                   onKeyDown={(e) => e.key === "Enter" && onOpen(job.id)}
                 >
-                  <div className="card-company">{job.company}</div>
+                  <div className="card-company">
+                    <CompanyLogo name={job.company} logoUrl={job.logo_url} size={18} />
+                    <span>{job.company}</span>
+                  </div>
                   <div className="card-title">{job.title}</div>
                   <div className="card-meta">
-                    {[job.work_mode && WORK_MODE_LABELS[job.work_mode], job.location].filter(Boolean).join(" · ")}
+                    {[job.work_mode && WORK_MODE_LABELS[job.work_mode], locationLabel(job)].filter(Boolean).join(" · ")}
                   </div>
                   {job.next_action && <div className="card-next">→ {job.next_action}</div>}
                   <div className="card-foot">
