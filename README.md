@@ -1,0 +1,126 @@
+# Job Pilot
+
+A local, single-user macOS app for tracking job applications. Everything stays on your Mac in one SQLite file. There are no accounts and no cloud, and nothing runs in the background.
+
+## Features
+
+- **Board and table views.** Use the kanban board with drag and drop, or a sortable table.
+- **Statuses.** A job moves through Saved, Applied, Screening, Interview, Offer, Rejected and Ghosted.
+- **Automatic applied date.** It is stamped the first time a job moves to Applied or a later stage.
+- **Status history** for every job, plus notes, a next action, the job URL, location, work mode and source.
+- **Search and filters.** Search by company or title, and filter by status and work mode.
+- **Company deduplication.** "Acme AI" and "acme ai" count as the same company.
+- **Light, night and system themes.** The native title bar follows the theme.
+- **Native macOS window** with the usual shortcuts.
+
+## Install
+
+Requires [uv](https://docs.astral.sh/uv/) and Node 20+.
+
+```sh
+cd frontend && npm install && cd ..
+./packaging/build_app.sh
+cp -R "dist/Job Pilot.app" /Applications/
+```
+
+Open **Job Pilot** from Spotlight or Launchpad.
+
+The app runs only while its window is open. Closing the window stops it completely, and nothing starts at login.
+
+To update after code changes, rebuild and replace the installed copy:
+
+```sh
+./packaging/build_app.sh
+rm -rf "/Applications/Job Pilot.app" && cp -R "dist/Job Pilot.app" /Applications/
+```
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| Cmd+M | Minimize |
+| Cmd+W | Close window (quits the app) |
+| Cmd+Q | Quit |
+| Cmd+Z / Shift+Cmd+Z | Undo / Redo in text fields |
+| Ctrl+Cmd+F | Full screen |
+| Esc | Close the add form or the job panel |
+
+## Your data
+
+Jobs are stored in:
+
+```
+~/Library/Application Support/JobPilot/jobpilot.db
+```
+
+To back up, copy that file. The app and the development server both use this same file. To use a different one, set `JOBPILOT_DB=/path/to/other.db`.
+
+## Development
+
+Run the backend and the UI with live reload:
+
+```sh
+./dev.sh
+```
+
+Then open http://127.0.0.1:5173.
+
+### Ports
+
+| | Default | Change with |
+| --- | --- | --- |
+| UI (Vite) | 5173 | `JOBPILOT_UI_PORT` |
+| Backend (FastAPI) | 8765 | `JOBPILOT_PORT` |
+
+If another app is already using one of these ports, `dev.sh` says which process holds it and stops. To run on other ports:
+
+```sh
+JOBPILOT_UI_PORT=5180 JOBPILOT_PORT=8770 ./dev.sh
+```
+
+To see what is using a port: `lsof -nP -iTCP:5173 -sTCP:LISTEN`.
+
+The desktop app uses port 8765 when it is free and any free port otherwise, so it can run alongside `dev.sh`.
+
+### Tests
+
+```sh
+cd backend && uv run pytest
+```
+
+### Schema changes
+
+Edit `backend/src/jobpilot/models.py`, then generate a migration:
+
+```sh
+cd backend && uv run alembic revision --autogenerate -m "describe change"
+```
+
+Migrations run automatically when the backend starts, in both the app and `dev.sh`.
+
+### App icon
+
+The icon is drawn in `packaging/icon.svg`. After editing it, run `./packaging/make_icon.sh` to regenerate `icon.icns`. This needs Google Chrome.
+
+## Project structure
+
+```
+backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
+  src/jobpilot/
+    api.py               REST endpoints under /api
+    models.py            Database tables
+    desktop.py           Native window, menus, title bar theme
+    migrations/          Alembic migrations
+  tests/
+frontend/                React + TypeScript + Vite
+  src/
+    App.tsx              Main screen, filters, theme switch
+    components/          Board, table, form, detail panel
+    styles.css           Themes and animations
+packaging/               PyInstaller spec, build script, icon
+dev.sh                   Runs backend + UI for development
+```
+
+## Stack
+
+FastAPI, SQLAlchemy 2, Alembic, SQLite · React 18, TypeScript, Vite · pywebview, PyInstaller

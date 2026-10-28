@@ -1,0 +1,57 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Secrets (API keys for the LLM steps go here, never in git)
+.env
+.env.*
+!.env.example
+
+# Local data: the real database lives in ~/Library/Application Support/JobPilot,
+# these catch any copies made during development
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+npm-debug.log*
+
+# Built UI copied into the backend by `npm run build`
+backend/src/jobpilot/web/
+
+# PyInstaller output
+build/
+dist/
+
+# Rendered from packaging/icon.svg by make_icon.sh
+packaging/icon.png
+
+# Logs
+*.log
+
+# Personal planning notes, kept local
+PLAN.md

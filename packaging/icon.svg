@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4f8cf0"/>
+      <stop offset="1" stop-color="#2557c4"/>
+    </linearGradient>
+  </defs>
+  <!-- macOS icon grid: 824px rounded square centered in 1024 -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <!-- three kanban columns -->
+  <g fill="#ffffff">
+    <rect x="232" y="290" width="160" height="300" rx="28" opacity="0.95"/>
+    <rect x="432" y="290" width="160" height="200" rx="28" opacity="0.8"/>
+    <rect x="632" y="290" width="160" height="420" rx="28" opacity="0.65"/>
+  </g>
+  <!-- check mark on the first column -->
+  <path d="M268 440 l40 40 l60 -80" fill="none" stroke="#2557c4" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
