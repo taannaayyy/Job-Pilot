@@ -1,4 +1,4 @@
-import type { Company, CompanyInput, Job, JobDetail, JobInput, Openings } from "./types";
+import type { Company, CompanyInput, ExtensionInfo, Job, JobDetail, JobInput, Openings } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -34,4 +34,8 @@ export const api = {
     body: Partial<CompanyInput> & { watching?: boolean; openings?: Openings | null },
   ) => request<Company>(`/companies/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteCompany: (id: number) => request<void>(`/companies/${id}`, { method: "DELETE" }),
+  getExtension: () => request<ExtensionInfo>("/extension"),
+  newExtensionKey: () => request<ExtensionInfo>("/extension/token", { method: "POST", body: "{}" }),
+  installExtension: () => request<{ folder: string }>("/extension/install", { method: "POST", body: "{}" }),
+  revealExtension: () => request<void>("/extension/reveal", { method: "POST", body: "{}" }),
 };

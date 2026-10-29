@@ -4,7 +4,19 @@ import Board from "./components/Board";
 import JobForm from "./components/JobForm";
 import JobPanel from "./components/JobPanel";
 import JobTable from "./components/JobTable";
-import { AutoIcon, BoardIcon, BriefcaseIcon, EyeIcon, MoonIcon, PlusIcon, SearchIcon, SunIcon, TableIcon } from "./components/Icons";
+import ExtensionDialog from "./components/ExtensionDialog";
+import {
+  AutoIcon,
+  BoardIcon,
+  BriefcaseIcon,
+  EyeIcon,
+  MoonIcon,
+  PlusIcon,
+  PuzzleIcon,
+  SearchIcon,
+  SunIcon,
+  TableIcon,
+} from "./components/Icons";
 import OrgForm from "./components/OrgForm";
 import OrgPanel from "./components/OrgPanel";
 import Segmented from "./components/Segmented";
@@ -70,6 +82,9 @@ export default function App() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [openOrgId, setOpenOrgId] = useState<number | null>(null);
   const [theme, setTheme] = useTheme();
+  const [extensionOpen, setExtensionOpen] = useState(false);
+  // Program holding the extension's port, if the app had to open on another one.
+  const [portBlockedBy, setPortBlockedBy] = useState<string | null>(null);
 
   const refreshOrgs = useCallback(async () => {
     try {
@@ -94,7 +109,18 @@ export default function App() {
 
   useEffect(() => {
     refresh();
+    api
+      .getExtension()
+      .then((info) => setPortBlockedBy(info.port_blocked_by))
+      .catch(() => {});
   }, [refresh]);
+
+  // Jobs saved from LinkedIn arrive while the window is open; show them when it is focused again.
+  useEffect(() => {
+    const onFocus = () => api.listJobs().then(setJobs).catch(() => {});
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   const setView = useCallback((next: View) => {
     setViewState(next);
@@ -190,6 +216,10 @@ export default function App() {
           )}
         </div>
         <div className="topbar-actions">
+          <button onClick={() => setExtensionOpen(true)} title="Save jobs from LinkedIn with the Chrome extension">
+            <PuzzleIcon />
+            Extension
+          </button>
           <Segmented
             ariaLabel="Theme"
             iconOnly
@@ -268,6 +298,16 @@ export default function App() {
             </optgroup>
             <option value="other">Other cities</option>
           </select>
+        </div>
+      )}
+
+      {portBlockedBy && (
+        <div className="warn banner" role="status">
+          Saving from LinkedIn is off: {portBlockedBy} is using the extension's port. Quit it and reopen Job Pilot.
+          <span className="spacer" />
+          <button className="link" onClick={() => setPortBlockedBy(null)}>
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -361,6 +401,8 @@ export default function App() {
           onAddJob={addJobAt}
         />
       )}
+
+      {extensionOpen && <ExtensionDialog onClose={() => setExtensionOpen(false)} />}
 
       {openId !== null && (
         <JobPanel

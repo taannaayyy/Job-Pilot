@@ -1,4 +1,5 @@
-"""Company logos: the website's icon, fetched once and cached next to the database."""
+"""Company logos, cached next to the database: the logo captured from a LinkedIn job page
+(sent by the Chrome extension), otherwise the website's icon, fetched once."""
 
 import hashlib
 import time
@@ -13,6 +14,7 @@ SOURCES = [
     "https://icons.duckduckgo.com/ip3/{domain}.ico",
 ]
 RETRY_MISSING_AFTER = 7 * 24 * 3600
+MAX_LOGO_BYTES = 512 * 1024
 
 
 def normalize_website(raw: str | None) -> str | None:
@@ -37,7 +39,7 @@ def fetch_icon(domain: str) -> bytes | None:
         req = urllib.request.Request(template.format(domain=domain), headers={"User-Agent": "JobPilot/0.1"})
         try:
             with urllib.request.urlopen(req, timeout=5) as res:
-                data = res.read(512 * 1024)
+                data = res.read(MAX_LOGO_BYTES)
         except (urllib.error.URLError, TimeoutError, OSError):
             continue
         if sniff_media_type(data):
@@ -81,3 +83,14 @@ class LogoCache:
         image.write_bytes(data)
         missing.unlink(missing_ok=True)
         return data
+
+    def _captured(self, company_id: int) -> Path:
+        return self.directory / f"company-{company_id}.img"
+
+    def get_captured(self, company_id: int) -> bytes | None:
+        path = self._captured(company_id)
+        return path.read_bytes() if path.is_file() else None
+
+    def put_captured(self, company_id: int, data: bytes) -> None:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self._captured(company_id).write_bytes(data)

@@ -11,6 +11,8 @@ a = Analysis(
     datas=[
         (str(PKG / "web"), "jobpilot/web"),
         (str(PKG / "migrations"), "jobpilot/migrations"),
+        # The Chrome extension, copied out by "Show extension folder" in the app.
+        (str(ROOT / "extension"), "jobpilot/extension"),
     ],
     hiddenimports=["jobpilot.models"],
     excludes=["tkinter", "uvloop", "httptools", "watchfiles", "websockets"],

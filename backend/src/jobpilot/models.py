@@ -73,6 +73,10 @@ class Company(Base):
     # Result of the last manual check for open positions; None means never checked.
     openings: Mapped[Openings | None] = mapped_column(String(10))
     last_checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # From the LinkedIn company link on a captured job ("acme-ai"); matches companies across name changes.
+    linkedin_slug: Mapped[str | None] = mapped_column(String(200), unique=True, index=True)
+    # "linkedin" when the logo was captured from a LinkedIn job page; otherwise it comes from the website.
+    logo_source: Mapped[str | None] = mapped_column(String(20))
 
     jobs: Mapped[list["Job"]] = relationship(back_populates="company")
 
@@ -96,6 +100,10 @@ class Job(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     date_saved: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     date_applied: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # The same LinkedIn job is never saved twice.
+    linkedin_job_id: Mapped[str | None] = mapped_column(String(20), unique=True, index=True)
+    # Job description as captured from the posting, for the extraction step.
+    raw_text: Mapped[str | None] = mapped_column(Text)
 
     company: Mapped[Company] = relationship(back_populates="jobs", lazy="joined")
     events: Mapped[list["StatusEvent"]] = relationship(

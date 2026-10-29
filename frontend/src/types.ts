@@ -76,6 +76,17 @@ export interface StatusEvent {
 
 export interface JobDetail extends Job {
   events: StatusEvent[];
+  /** Job description captured from the posting by the Chrome extension. */
+  raw_text: string | null;
+}
+
+export interface ExtensionInfo {
+  token: string;
+  last_seen: string | null;
+  capture_port: number;
+  /** Set when another program held the extension's port and the app opened on another one. */
+  port_blocked_by: string | null;
+  folder_available: boolean;
 }
 
 export type JobInput = {

@@ -178,6 +178,13 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
                 </li>
               ))}
             </ol>
+
+            {job.raw_text && (
+              <details className="captured">
+                <summary>Job description (saved from the posting)</summary>
+                <div className="raw-text">{job.raw_text}</div>
+              </details>
+            )}
           </form>
         )}
       </aside>

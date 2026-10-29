@@ -1,9 +1,9 @@
 #!/bin/sh
 # Runs the backend and the UI together.
-# Ports can be changed with JOBPILOT_PORT (backend, default 8765) and JOBPILOT_UI_PORT (UI, default 5173).
+# Ports can be changed with JOBPILOT_PORT (backend, default 8766; the installed app uses 8765) and JOBPILOT_UI_PORT (UI, default 5173).
 cd "$(dirname "$0")"
 
-export JOBPILOT_PORT="${JOBPILOT_PORT:-8765}"
+export JOBPILOT_PORT="${JOBPILOT_PORT:-8766}"
 export JOBPILOT_UI_PORT="${JOBPILOT_UI_PORT:-5173}"
 
 busy=0

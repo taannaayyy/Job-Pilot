@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Job Pilot extension settings</title>
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      body { padding: 40px 16px; }
+      main { max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+      ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+      details summary { cursor: pointer; color: var(--muted); }
+      details[open] summary { margin-bottom: 10px; }
+      #saved { color: var(--ok); opacity: 0; transition: opacity .2s; }
+      #saved.show { opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1><img src="icons/icon32.png" alt="" /> Job Pilot extension</h1>
+      <ol class="muted">
+        <li>Open the Job Pilot app on your Mac.</li>
+        <li>Click <strong>Extension</strong> at the top of the app and copy the key.</li>
+        <li>Paste it below and click Save.</li>
+      </ol>
+      <form id="form">
+        <label>
+          Extension key
+          <input id="token" autocomplete="off" spellcheck="false" placeholder="Paste the key from Job Pilot" />
+        </label>
+        <details>
+          <summary>Advanced</summary>
+          <label>
+            Port
+            <input id="port" type="number" min="1024" max="65535" />
+            <small>8765 is the installed app. Use 8766 while running the development server (dev.sh).</small>
+          </label>
+        </details>
+        <div class="row" style="margin-top: 14px">
+          <button class="primary" type="submit">Save</button>
+          <span id="saved">Saved</span>
+        </div>
+      </form>
+      <div class="status"><span class="dot" id="dot"></span><p id="state">Checking…</p></div>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

@@ -100,6 +100,8 @@ class JobOut(BaseModel):
 
 class JobDetail(JobOut):
     events: list[StatusEventOut]
+    # Job description captured from the posting by the Chrome extension.
+    raw_text: str | None
 
 
 class _CompanyFields(BaseModel):

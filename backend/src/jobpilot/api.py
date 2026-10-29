@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from jobpilot import linkedin
 from jobpilot.db import utcnow
 from jobpilot.locations import normalize_location
 from jobpilot.logos import domain_of, sniff_media_type
@@ -45,6 +46,8 @@ COMPUTED = {"company", "company_website", "company_watching", "logo_url", "event
 
 
 def _logo_url(company: Company) -> str | None:
+    if company.logo_source == "linkedin":
+        return f"/api/companies/{company.id}/logo?src=linkedin"
     # The domain in the query string makes the browser refetch when the website changes.
     if not company.website:
         return None
@@ -60,6 +63,16 @@ def _to_out(job: Job, model: type[JobOut] = JobOut) -> JobOut:
     if "events" in model.model_fields:
         data["events"] = job.events
     return model.model_validate(data)
+
+
+def set_linkedin_job_id(session: Session, job: Job, linkedin_job_id: str | None) -> None:
+    """The same LinkedIn job is never saved twice, whether it was captured or its link was pasted."""
+    if linkedin_job_id:
+        with session.no_autoflush:  # a job being created isn't in the session yet
+            other = session.scalar(select(Job).where(Job.linkedin_job_id == linkedin_job_id, Job.id != job.id))
+        if other is not None:
+            raise HTTPException(409, f"This LinkedIn job is already saved: {other.title} at {other.company.name}")
+    job.linkedin_job_id = linkedin_job_id
 
 
 def _get_job(session: Session, job_id: int) -> Job:
@@ -97,6 +110,7 @@ def create_job(body: JobCreate, session: Session = Depends(get_session)):
         company.website = body.company_website
     job = Job(company=company, **fields)
     job.city, job.side, job.district = normalize_location(job.city, job.side, job.district)
+    set_linkedin_job_id(session, job, linkedin.job_id_from_url(job.url))
     _set_status(job, body.status)
     session.add(job)
     session.commit()
@@ -125,6 +139,8 @@ def update_job(job_id: int, body: JobUpdate, session: Session = Depends(get_sess
             continue
         setattr(job, field, value)
     job.city, job.side, job.district = normalize_location(job.city, job.side, job.district)
+    if "url" in changes:
+        set_linkedin_job_id(session, job, linkedin.job_id_from_url(job.url))
     session.commit()
     return _to_out(job, JobDetail)
 
@@ -139,9 +155,11 @@ def delete_job(job_id: int, session: Session = Depends(get_session)):
 @router.get("/companies/{company_id}/logo")
 def company_logo(company_id: int, request: Request, session: Session = Depends(get_session)):
     company = session.get(Company, company_id)
-    if company is None or not company.website:
+    if company is None:
         raise HTTPException(404, "No logo")
-    data = request.app.state.logos.get(domain_of(company.website))
+    data = request.app.state.logos.get_captured(company.id) if company.logo_source == "linkedin" else None
+    if data is None and company.website:
+        data = request.app.state.logos.get(domain_of(company.website))
     if data is None:
         raise HTTPException(404, "No logo", headers={"Cache-Control": "max-age=3600"})
     return Response(data, media_type=sniff_media_type(data), headers={"Cache-Control": "max-age=86400"})

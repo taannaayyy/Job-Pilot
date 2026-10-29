@@ -6,8 +6,10 @@ and quits. Nothing starts at login.
 
 import json
 import socket
+import subprocess
 import threading
 import time
+from pathlib import Path
 
 import uvicorn
 import webview
@@ -17,16 +19,68 @@ from jobpilot import config
 from jobpilot.main import WEB_DIR, create_app
 
 
-def _pick_port(preferred: int) -> int:
-    """Use the usual port when it is free, otherwise any free port, so another app on 8765 doesn't block us."""
-    for port in (preferred, 0):
-        with socket.socket() as s:
-            try:
-                s.bind(("127.0.0.1", port))
-            except OSError:
-                continue
-            return s.getsockname()[1]
-    raise RuntimeError("no free port")
+def _free_port(port: int) -> int | None:
+    """The port if it can be bound (0 picks any free one), otherwise None."""
+    with socket.socket() as s:
+        # Like uvicorn: connections from a just-closed app linger on the port (TIME_WAIT)
+        # but don't stop a new server from listening there.
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError:
+            return None
+        return s.getsockname()[1]
+
+
+def _port_holder(port: int) -> str | None:
+    """Name of the program listening on the port, e.g. "node" or "Docker"."""
+    try:
+        pid = subprocess.run(
+            ["lsof", "-nP", "-tiTCP:%d" % port, "-sTCP:LISTEN"], capture_output=True, text=True, timeout=3
+        ).stdout.split()[0]
+        command = subprocess.run(["ps", "-o", "comm=", "-p", pid], capture_output=True, text=True, timeout=3).stdout
+    except (OSError, IndexError, subprocess.SubprocessError):
+        return None
+    path = Path(command.strip())
+    # Show "Docker" for /Applications/Docker.app/Contents/MacOS/com.docker.backend.
+    app = next((p.stem for p in path.parents if p.suffix == ".app"), None)
+    return app or path.name or None
+
+
+def _ask_open_anyway(port: int, holder: str | None) -> bool:
+    import AppKit
+
+    app = AppKit.NSApplication.sharedApplication()
+    app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyRegular)
+    app.activateIgnoringOtherApps_(True)
+    alert = AppKit.NSAlert.alloc().init()
+    alert.setMessageText_(f"Port {port} is already in use")
+    alert.setInformativeText_(
+        f"{holder or 'Another program'} is using port {port}, which the Job Pilot Chrome extension uses "
+        "to reach the app.\n\nQuit it and open Job Pilot again, or open anyway: everything works except "
+        "saving jobs from LinkedIn, which wait in the extension until the port is free."
+    )
+    alert.addButtonWithTitle_("Open Anyway")
+    alert.addButtonWithTitle_("Quit")
+    return alert.runModal() == AppKit.NSAlertFirstButtonReturn
+
+
+def _choose_port(preferred: int) -> tuple[int, str | None]:
+    """The extension's port when free. Otherwise, if the user agrees, any free port, plus the
+    name of the program in the way (the UI shows it in a banner)."""
+    # A Job Pilot that was just quit (e.g. to update it) can take a moment to let go of the port.
+    deadline = time.monotonic() + 3
+    while (port := _free_port(preferred)) is None and time.monotonic() < deadline:
+        time.sleep(0.2)
+    if port is not None:
+        return port, None
+    holder = _port_holder(preferred)
+    if not _ask_open_anyway(preferred, holder):
+        raise SystemExit(0)
+    port = _free_port(0)
+    if port is None:
+        raise RuntimeError("no free port")
+    return port, holder or "another program"
 
 
 def _wait_until_up(server: uvicorn.Server, timeout: float = 15) -> None:
@@ -142,9 +196,11 @@ def main() -> None:
     if not (WEB_DIR / "index.html").is_file():
         raise SystemExit("UI is not built. Run `npm run build` in frontend/ first.")
 
-    port = _pick_port(config.api_port())
+    port, blocked_by = _choose_port(config.api_port(default=config.CAPTURE_PORT))
+    app = create_app()
+    app.state.port_blocked_by = blocked_by
     server = uvicorn.Server(
-        uvicorn.Config(create_app(), host="127.0.0.1", port=port, loop="asyncio", http="h11", log_level="warning")
+        uvicorn.Config(app, host="127.0.0.1", port=port, loop="asyncio", http="h11", log_level="warning")
     )
     backend = threading.Thread(target=server.run, daemon=True)
     backend.start()

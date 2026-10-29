@@ -98,6 +98,8 @@ def test_serves_built_ui(client):
     res = client.get("/")
     assert res.status_code == 200
     assert "<div id=\"root\">" in res.text
+    # A rebuilt app must never show the previous UI from the window's cache.
+    assert res.headers["cache-control"] == "no-cache"
     assert client.get("/api/jobs").status_code == 200
 
 

@@ -4,6 +4,7 @@ A local, single-user macOS app for tracking job applications. Everything stays o
 
 ## Features
 
+- **Save jobs from LinkedIn.** A Chrome extension adds a **Save to Job Pilot** button to LinkedIn job pages. One click saves the title, company, company logo, location, work mode, job type and description. The same posting is never saved twice, even if you also pasted its link by hand. Jobs you save while Job Pilot is closed wait in the extension and are added the next time you open the app.
 - **Board and table views.** Use the kanban board with drag and drop, or a sortable table.
 - **Statuses.** A job moves through Saved, Applied, Screening, Interview, Awaiting decision (all interviews done, waiting for their answer), Offer, Rejected and Ghosted.
 - **Automatic applied date.** It is stamped the first time a job moves to Applied or a later stage.
@@ -28,7 +29,19 @@ cp -R "dist/Job Pilot.app" /Applications/
 
 Open **Job Pilot** from Spotlight or Launchpad.
 
+### Chrome extension
+
+1. In Job Pilot, click **Extension** at the top, then **Open Chrome**. Chrome opens its extensions page, and the extension's folder location is copied for you.
+2. In Chrome, turn on **Developer mode**, click **Load unpacked**, press Shift+Cmd+G, paste with Cmd+V, press Return and click **Select**.
+3. The extension's settings open. Paste the key shown in Job Pilot's Extension dialog and click Save.
+
+Chrome doesn't let apps install extensions themselves, so this is done once by hand. Publishing to the Chrome Web Store, which would make it a one-click install, is planned.
+
+The extension only reads the job page you have open when you click its button. It never browses LinkedIn on its own. After updating the app, click **Open Chrome** again and press the reload button on the extension.
+
 The app runs only while its window is open. Closing the window stops it completely, and nothing starts at login.
+
+The app listens on port 8765, where the extension looks for it. If another program already uses that port, Job Pilot says which one and lets you quit or open anyway. If you open anyway, everything works except saving from LinkedIn, which waits until the port is free.
 
 To update after code changes, rebuild and replace the installed copy:
 
@@ -58,6 +71,8 @@ Jobs are stored in:
 
 Downloaded company logos are kept in the `logos` folder next to it and are downloaded again if deleted.
 
+The extension key is in `extension-key` in the same folder.
+
 To back up, copy `jobpilot.db`. The app and the development server both use this same file. To use a different one, set `JOBPILOT_DB=/path/to/other.db`.
 
 ## Development
@@ -75,7 +90,8 @@ Then open http://127.0.0.1:5173.
 | | Default | Change with |
 | --- | --- | --- |
 | UI (Vite) | 5173 | `JOBPILOT_UI_PORT` |
-| Backend (FastAPI) | 8765 | `JOBPILOT_PORT` |
+| Backend (FastAPI) | 8766 | `JOBPILOT_PORT` |
+| Installed app | 8765 | |
 
 If another app is already using one of these ports, `dev.sh` says which process holds it and stops. To run on other ports:
 
@@ -85,7 +101,7 @@ JOBPILOT_UI_PORT=5180 JOBPILOT_PORT=8770 ./dev.sh
 
 To see what is using a port: `lsof -nP -iTCP:5173 -sTCP:LISTEN`.
 
-The desktop app uses port 8765 when it is free and any free port otherwise, so it can run alongside `dev.sh`.
+The installed app uses 8765 and `dev.sh` uses 8766, so both can run at the same time. To point the extension at the development server, set its port to 8766 under **Advanced** in the extension's settings. Both use the same database and extension key.
 
 ### Tests
 
@@ -113,6 +129,8 @@ The icon is drawn in `packaging/icon.svg`. After editing it, run `./packaging/ma
 backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
   src/jobpilot/
     api.py               REST endpoints under /api
+    capture.py           Endpoints for the Chrome extension
+    linkedin.py          Reads LinkedIn job IDs, locations and job types
     logos.py             Fetches and caches company logos
     models.py            Database tables
     desktop.py           Native window, menus, title bar theme
@@ -124,10 +142,13 @@ frontend/                React + TypeScript + Vite
     locations.ts         Istanbul districts by side
     components/          Board, table, form, detail panel
     styles.css           Themes and animations
+extension/               Chrome extension (Manifest V3)
+  content.js             Button on LinkedIn job pages, reads the open job
+  background.js          Queue while the app is closed, delivery to the app
 packaging/               PyInstaller spec, build script, icon
 dev.sh                   Runs backend + UI for development
 ```
 
 ## Stack
 
-FastAPI, SQLAlchemy 2, Alembic, SQLite · React 18, TypeScript, Vite · pywebview, PyInstaller
+FastAPI, SQLAlchemy 2, Alembic, SQLite · React 18, TypeScript, Vite · pywebview, PyInstaller · Chrome extension (Manifest V3)

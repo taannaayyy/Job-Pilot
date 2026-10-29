@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const apiPort = process.env.JOBPILOT_PORT ?? "8765";
+const apiPort = process.env.JOBPILOT_PORT ?? "8766";
 const uiPort = Number(process.env.JOBPILOT_UI_PORT ?? "5173");
 
 export default defineConfig({
