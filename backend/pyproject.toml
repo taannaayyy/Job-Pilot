@@ -8,6 +8,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.1",
+    "anthropic>=2.3.0",
     "fastapi>=0.162.0",
     "pywebview>=6.2.1",
     "sqlalchemy>=2.1.6",

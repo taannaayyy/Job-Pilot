@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 from jobpilot.locations import Side
 from jobpilot.logos import normalize_website
 
-from jobpilot.models import JobStatus, JobType, Openings, OrgKind, WorkMode
+from jobpilot.models import ExtractionStatus, Importance, JobStatus, JobType, Openings, OrgKind, SkillMark, WorkMode
 
 
 def _with_scheme(v):
@@ -63,6 +63,10 @@ class JobUpdate(_JobFields):
     status: JobStatus | None = None
     next_action: str | None = None
     notes: str | None = None
+    # Skill Gap
+    target_group_id: int | None = None
+    study_only: bool | None = None
+    raw_text: str | None = Field(default=None, max_length=100_000)
 
 
 class StatusEventOut(BaseModel):
@@ -96,12 +100,30 @@ class JobOut(BaseModel):
     notes: str
     date_saved: datetime
     date_applied: datetime | None
+    target_group_id: int | None
+    study_only: bool
+    extraction_status: ExtractionStatus | None
+
+
+class RequirementOut(BaseModel):
+    id: int
+    skill_id: int
+    name: str
+    category: str
+    importance: Importance
+    evidence: str | None
+    source: str
+    mark: SkillMark | None
 
 
 class JobDetail(JobOut):
     events: list[StatusEventOut]
-    # Job description captured from the posting by the Chrome extension.
+    # Job description captured from the posting by the Chrome extension, or pasted.
     raw_text: str | None
+    extraction_error: str | None
+    extracted_at: datetime | None
+    extracted_with: str | None
+    requirements: list[RequirementOut]
 
 
 class _CompanyFields(BaseModel):

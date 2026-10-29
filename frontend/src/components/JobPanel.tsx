@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { fmtDateTime } from "../format";
-import { STATUS_LABELS, type Job, type JobDetail, type JobInput, type Status } from "../types";
+import { STATUS_LABELS, type Job, type JobDetail, type JobInput, type RoleGroup, type Status } from "../types";
 import { useClosing } from "../useClosing";
 import { CheckIcon, CloseIcon, ExternalIcon } from "./Icons";
 import FavoriteButton from "./FavoriteButton";
 import CompanyLogo from "./CompanyLogo";
 import JobFields from "./JobFields";
+import JobSkills from "./JobSkills";
 import StatusSelect from "./StatusSelect";
 
 interface Props {
@@ -16,6 +17,8 @@ interface Props {
   onDeleted: (id: number) => void;
   /** The job's company was added to or removed from favorites. */
   onWatchChanged: () => void;
+  groups: RoleGroup[];
+  onGroupsChanged: () => void;
 }
 
 function toInput(job: JobDetail): JobInput {
@@ -23,7 +26,7 @@ function toInput(job: JobDetail): JobInput {
   return { company, company_website, title, url, city, side, district, job_type, work_mode, source, next_action, notes };
 }
 
-export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchChanged }: Props) {
+export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchChanged, groups, onGroupsChanged }: Props) {
   const [job, setJob] = useState<JobDetail | null>(null);
   const [input, setInput] = useState<JobInput | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +58,15 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
     onSaved(updated);
     setError(null);
   };
+
+  // Skill Gap changes save right away and leave the fields being edited alone.
+  const applySkills = useCallback(
+    (updated: JobDetail) => {
+      setJob(updated);
+      onSaved(updated);
+    },
+    [onSaved],
+  );
 
   const changeStatus = async (status: Status) => {
     try {
@@ -160,6 +172,14 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
                 {busy ? <span className="spinner small" /> : saved ? <><CheckIcon /> Saved</> : "Save changes"}
               </button>
             </div>
+
+            <JobSkills
+              job={job}
+              groups={groups}
+              onChange={applySkills}
+              onGroupsChanged={onGroupsChanged}
+              onError={setError}
+            />
 
             <h3>Status history</h3>
             <ol className="history">

@@ -65,6 +65,11 @@ export interface Job {
   notes: string;
   date_saved: string;
   date_applied: string | null;
+  /** Skill Gap: the role group this job is a target of. */
+  target_group_id: number | null;
+  /** Kept only to study the role; hidden from the job board. */
+  study_only: boolean;
+  extraction_status: ExtractionStatus | null;
 }
 
 export interface StatusEvent {
@@ -76,9 +81,108 @@ export interface StatusEvent {
 
 export interface JobDetail extends Job {
   events: StatusEvent[];
-  /** Job description captured from the posting by the Chrome extension. */
+  /** Job description captured from the posting by the Chrome extension, or pasted. */
   raw_text: string | null;
+  extraction_error: string | null;
+  extracted_at: string | null;
+  extracted_with: string | null;
+  requirements: Requirement[];
 }
+
+// ---- Skill Gap
+
+export type ExtractionStatus = "pending" | "running" | "done" | "failed";
+export type Importance = "must" | "nice";
+
+export const SKILL_MARKS = ["have", "learning", "gap", "ignore"] as const;
+export type SkillMark = (typeof SKILL_MARKS)[number];
+export const SKILL_MARK_LABELS: Record<SkillMark, string> = {
+  have: "Have",
+  learning: "Learning",
+  gap: "Gap",
+  ignore: "Ignore",
+};
+
+export const SKILL_CATEGORY_LABELS: Record<string, string> = {
+  language: "Language",
+  framework: "Framework",
+  tool: "Tool",
+  cloud: "Cloud",
+  database: "Database",
+  concept: "Concept",
+  practice: "Practice",
+  experience: "Experience",
+  education: "Education",
+  spoken_language: "Spoken language",
+  soft_skill: "Soft skill",
+  other: "Other",
+};
+
+export interface Requirement {
+  id: number;
+  skill_id: number;
+  name: string;
+  category: string;
+  importance: Importance;
+  evidence: string | null;
+  /** "dictionary", "model" or "user" */
+  source: string;
+  mark: SkillMark | null;
+}
+
+export interface RoleGroup {
+  id: number;
+  name: string;
+  job_count: number;
+}
+
+export interface SkillRow {
+  id: number;
+  name: string;
+  category: string;
+  mark: SkillMark | null;
+  plan_note: string;
+  jobs: number;
+  must: number;
+  nice: number;
+}
+
+export interface SkillGap {
+  targets: number;
+  extracted: number;
+  pending: number;
+  failed: number;
+  without_text: number;
+  /** 0..1; null when there is nothing to cover yet. */
+  coverage: number | null;
+  skills: SkillRow[];
+}
+
+export interface SkillDetail {
+  id: number;
+  name: string;
+  category: string;
+  mark: SkillMark | null;
+  plan_note: string;
+  jobs: { job_id: number; title: string; company: string; importance: Importance; evidence: string | null }[];
+  history: { from_mark: SkillMark | null; to_mark: SkillMark | null; timestamp: string }[];
+}
+
+export type AIProvider = "none" | "ollama" | "openai" | "anthropic";
+
+export interface AIProviderSettings {
+  base_url?: string;
+  model?: string;
+  /** Only whether a key is saved; the key itself is never sent to the page. */
+  has_key?: boolean;
+}
+
+export interface AISettings {
+  provider: AIProvider;
+  providers: Record<string, AIProviderSettings>;
+}
+
+export type AIProviderInput = { base_url?: string; model?: string; api_key?: string };
 
 export interface ExtensionInfo {
   token: string;

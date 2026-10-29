@@ -1,10 +1,12 @@
 # Job Pilot
 
-A local, single-user macOS app for tracking job applications. Everything stays on your Mac in one SQLite file. There are no accounts and no cloud, and nothing runs in the background.
+A local, single-user macOS app for tracking job applications and for seeing what the roles you want require. Everything stays on your Mac in one SQLite file. There are no accounts and no cloud, and nothing runs in the background.
 
 ## Features
 
 - **Save jobs from LinkedIn.** A Chrome extension adds a **Save to Job Pilot** button to LinkedIn job pages. One click saves the title, company, company logo, location, work mode, job type and description. The same posting is never saved twice, even if you also pasted its link by hand. On a LinkedIn company or university page the same button saves the company to your favorites, with its logo, LinkedIn page, website and type. Whatever you save while Job Pilot is closed waits in the extension and is added the next time you open the app.
+- **Skill Gap.** Make any job a **target** of a role group you name, like "AI Engineer (now)" or "Senior ML Engineer (in 3 years)". Its status doesn't matter, and a job can be kept **only to study the role**, off the job board. Each target's description is read, and the Skill Gap page adds up what the targets require: every skill, tool, concept, degree, language and level of experience, how many targets ask for it, and whether as a must-have or nice-to-have. Mark each one **Have**, **Learning**, **Gap** or **Ignore**, write down your plan for it, and see what share of the requirements you already cover. Every change of a mark is kept, for the progress view that comes next.
+- **Your choice of AI, or none.** Descriptions are read by a built-in skill dictionary, which needs no AI and works instantly, plus the model you choose: a local model through Ollama (free, nothing leaves your Mac), any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Gemini, Mistral, LM Studio...) or Claude with your own key. API keys stay on your Mac in a file only you can read.
 - **Board and table views.** Use the kanban board with drag and drop, or a sortable table.
 - **Statuses.** A job moves through Saved, Applied, Screening, Interview, Awaiting decision (all interviews done, waiting for their answer), Offer, Rejected and Ghosted.
 - **Automatic applied date.** It is stamped the first time a job moves to Applied or a later stage.
@@ -130,6 +132,10 @@ backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
   src/jobpilot/
     api.py               REST endpoints under /api
     capture.py           Endpoints for the Chrome extension
+    skillgap.py          Skill Gap endpoints: role groups, the gap list, marks, AI settings
+    skills.py            The skill dictionary: finds known skills and merges their spellings
+    ai.py                The AI providers: Ollama, OpenAI-compatible, Claude
+    extraction.py        Dictionary + model, merged; background worker
     linkedin.py          Reads LinkedIn job IDs, locations, job types and company pages
     logos.py             Fetches and caches company logos
     models.py            Database tables

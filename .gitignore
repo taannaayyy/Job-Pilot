@@ -54,4 +54,4 @@ packaging/icon.png
 *.log
 
 # Personal planning notes, kept local
-PLAN.md
+PLAN*.md

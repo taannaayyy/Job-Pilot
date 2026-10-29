@@ -4,14 +4,18 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from jobpilot import linkedin
 from jobpilot.db import utcnow
 from jobpilot.locations import normalize_location
 from jobpilot.logos import domain_of, sniff_media_type
-from jobpilot.models import ACTIVE_STATUSES, Company, Job, JobStatus, StatusEvent, WorkMode, company_key
-from jobpilot.schemas import CompanyCreate, CompanyOut, CompanyUpdate, JobCreate, JobDetail, JobOut, JobUpdate
+from jobpilot.models import (
+    ACTIVE_STATUSES, Company, ExtractionStatus, Job, JobStatus, RoleGroup, StatusEvent, WorkMode, company_key,
+)
+from jobpilot.schemas import (
+    CompanyCreate, CompanyOut, CompanyUpdate, JobCreate, JobDetail, JobOut, JobUpdate, RequirementOut,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -42,7 +46,7 @@ def _set_status(job: Job, status: JobStatus) -> None:
         job.date_applied = utcnow()
 
 
-COMPUTED = {"company", "company_website", "company_watching", "logo_url", "events"}
+COMPUTED = {"company", "company_website", "company_watching", "logo_url", "events", "requirements"}
 
 
 def _logo_url(company: Company) -> str | None:
@@ -62,7 +66,28 @@ def _to_out(job: Job, model: type[JobOut] = JobOut) -> JobOut:
     data["logo_url"] = _logo_url(job.company)
     if "events" in model.model_fields:
         data["events"] = job.events
+    if "requirements" in model.model_fields:
+        data["requirements"] = [
+            RequirementOut(
+                id=r.id, skill_id=r.skill_id, name=r.skill.name, category=r.skill.category,
+                importance=r.importance, evidence=r.evidence, source=r.source, mark=r.skill.mark,
+            )
+            for r in sorted(job.requirements, key=lambda r: (r.importance != "must", r.skill.name.casefold()))
+            if r.active
+        ]
     return model.model_validate(data)
+
+
+def queue_extraction(job: Job) -> None:
+    """Marks the job as waiting for extraction; start_extraction sends it after the commit."""
+    job.extraction_status = ExtractionStatus.PENDING
+    job.extraction_error = None
+
+
+def start_extraction(request: Request, job: Job) -> None:
+    if job.extraction_status == ExtractionStatus.PENDING:
+        request.app.state.extractor.enqueue(job.id)
+        object_session(job).expire(job)  # the worker may have finished already
 
 
 def set_linkedin_job_id(session: Session, job: Job, linkedin_job_id: str | None) -> None:
@@ -123,9 +148,15 @@ def get_job(job_id: int, session: Session = Depends(get_session)):
 
 
 @router.patch("/jobs/{job_id}", response_model=JobDetail)
-def update_job(job_id: int, body: JobUpdate, session: Session = Depends(get_session)):
+def update_job(job_id: int, body: JobUpdate, request: Request, session: Session = Depends(get_session)):
     job = _get_job(session, job_id)
     changes = body.model_dump(exclude_unset=True, mode="json")
+    if changes.get("target_group_id") is not None and session.get(RoleGroup, changes["target_group_id"]) is None:
+        raise HTTPException(404, "Role group not found")
+    if "raw_text" in changes:
+        changes["raw_text"] = (changes["raw_text"] or "").strip() or None
+    text_changed = "raw_text" in changes and changes["raw_text"] != job.raw_text
+    became_target = changes.get("target_group_id") is not None and job.target_group_id is None
     if "company" in changes:
         job.company = _get_or_create_company(session, changes.pop("company"))
     if "company_website" in changes:
@@ -135,13 +166,17 @@ def update_job(job_id: int, body: JobUpdate, session: Session = Depends(get_sess
         if status is not None:
             _set_status(job, JobStatus(status))
     for field, value in changes.items():
-        if field in ("title", "notes") and value is None:
+        if field in ("title", "notes", "study_only") and value is None:
             continue
         setattr(job, field, value)
     job.city, job.side, job.district = normalize_location(job.city, job.side, job.district)
     if "url" in changes:
         set_linkedin_job_id(session, job, linkedin.job_id_from_url(job.url))
+    # A target's requirements are read when it becomes one, and again when its description changes.
+    if job.target_group_id and job.raw_text and (text_changed or (became_target and job.extraction_status is None)):
+        queue_extraction(job)
     session.commit()
+    start_extraction(request, job)
     return _to_out(job, JobDetail)
 
 

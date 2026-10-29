@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from jobpilot.db import Base, UTCDateTime, utcnow
@@ -45,6 +45,27 @@ class OrgKind(StrEnum):
 class Openings(StrEnum):
     HIRING = "hiring"
     NONE = "none"
+
+
+class Importance(StrEnum):
+    MUST = "must"
+    NICE = "nice"  # "a plus", "preferred", "nice to have"
+
+
+class SkillMark(StrEnum):
+    """How the user rates themselves. No mark counts as a gap."""
+
+    HAVE = "have"
+    LEARNING = "learning"
+    GAP = "gap"
+    IGNORE = "ignore"  # "I don't want roles that need this"
+
+
+class ExtractionStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
 
 
 # Jobs still going somewhere; counted as "active" on the watchlist.
@@ -102,8 +123,17 @@ class Job(Base):
     date_applied: Mapped[datetime | None] = mapped_column(UTCDateTime)
     # The same LinkedIn job is never saved twice.
     linkedin_job_id: Mapped[str | None] = mapped_column(String(20), unique=True, index=True)
-    # Job description as captured from the posting, for the extraction step.
+    # Job description as captured from the posting (or pasted), for the extraction step.
     raw_text: Mapped[str | None] = mapped_column(Text)
+    # Skill Gap: the role group this job is a target of. Status doesn't matter.
+    target_group_id: Mapped[int | None] = mapped_column(ForeignKey("role_group.id", ondelete="SET NULL"), index=True)
+    # Kept only to study the role: not shown on the job board.
+    study_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    extraction_status: Mapped[ExtractionStatus | None] = mapped_column(String(10))
+    extraction_error: Mapped[str | None] = mapped_column(String(500))
+    extracted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # "Dictionary + Ollama qwen2.5:3b"
+    extracted_with: Mapped[str | None] = mapped_column(String(200))
 
     company: Mapped[Company] = relationship(back_populates="jobs", lazy="joined")
     events: Mapped[list["StatusEvent"]] = relationship(
@@ -111,6 +141,8 @@ class Job(Base):
         cascade="all, delete-orphan",
         order_by="StatusEvent.timestamp",
     )
+    target_group: Mapped["RoleGroup | None"] = relationship(back_populates="jobs")
+    requirements: Mapped[list["Requirement"]] = relationship(back_populates="job", cascade="all, delete-orphan")
 
 
 class StatusEvent(Base):
@@ -123,3 +155,74 @@ class StatusEvent(Base):
     timestamp: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     job: Mapped[Job] = relationship(back_populates="events")
+
+
+class RoleGroup(Base):
+    """A kind of role the user is aiming for, e.g. "AI Engineer (now)" or "Senior ML Engineer (in 3 years)"."""
+
+    __tablename__ = "role_group"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    jobs: Mapped[list[Job]] = relationship(back_populates="target_group")
+
+
+class Skill(Base):
+    """One requirement across all jobs ("PyTorch", "2+ years ML in production"), with the user's own mark."""
+
+    __tablename__ = "skill"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    # Normalized name; "pytorch" and "PyTorch" are one skill.
+    key: Mapped[str] = mapped_column(String(200), unique=True)
+    category: Mapped[str] = mapped_column(String(30))
+    mark: Mapped[SkillMark | None] = mapped_column(String(10))
+    # What the user plans to do about it: a course, a project idea.
+    plan_note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    requirements: Mapped[list["Requirement"]] = relationship(back_populates="skill", cascade="all, delete-orphan")
+    events: Mapped[list["SkillEvent"]] = relationship(
+        back_populates="skill", cascade="all, delete-orphan", order_by="SkillEvent.timestamp"
+    )
+
+
+class Requirement(Base):
+    """A job asks for a skill."""
+
+    __tablename__ = "requirement"
+    __table_args__ = (UniqueConstraint("job_id", "skill_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id", ondelete="CASCADE"), index=True)
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skill.id", ondelete="CASCADE"), index=True)
+    importance: Mapped[Importance] = mapped_column(String(10))
+    # The words in the posting it came from.
+    evidence: Mapped[str | None] = mapped_column(String(500))
+    # "dictionary", "model", "user" (added or edited by the user) or "removed" (by the user; kept so
+    # reading the description again doesn't bring it back). Extraction never touches the last two.
+    source: Mapped[str] = mapped_column(String(20))
+
+    @property
+    def active(self) -> bool:
+        return self.source != "removed"
+
+    job: Mapped[Job] = relationship(back_populates="requirements")
+    skill: Mapped[Skill] = relationship(back_populates="requirements", lazy="joined")
+
+
+class SkillEvent(Base):
+    """Every change of the user's mark, for the progress shown on Insights."""
+
+    __tablename__ = "skill_event"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skill.id", ondelete="CASCADE"), index=True)
+    from_mark: Mapped[SkillMark | None] = mapped_column(String(10))
+    to_mark: Mapped[SkillMark | None] = mapped_column(String(10))
+    timestamp: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    skill: Mapped[Skill] = relationship(back_populates="events")

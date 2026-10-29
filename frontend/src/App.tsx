@@ -5,6 +5,8 @@ import JobForm from "./components/JobForm";
 import JobPanel from "./components/JobPanel";
 import JobTable from "./components/JobTable";
 import ExtensionDialog from "./components/ExtensionDialog";
+import AISettingsDialog from "./components/AISettingsDialog";
+import SkillGap, { DEFAULT_GAP_FILTERS, type GapFilters } from "./components/SkillGap";
 import {
   AutoIcon,
   BoardIcon,
@@ -16,6 +18,7 @@ import {
   SearchIcon,
   SunIcon,
   TableIcon,
+  TargetIcon,
 } from "./components/Icons";
 import OrgForm from "./components/OrgForm";
 import OrgPanel from "./components/OrgPanel";
@@ -35,17 +38,20 @@ import {
   type JobInput,
   type JobType,
   type Openings,
+  type RoleGroup,
   type Status,
   type WorkMode,
 } from "./types";
 
 type View = "board" | "table";
-type Page = "jobs" | "watchlist";
+type Page = "jobs" | "watchlist" | "skills";
+const PAGES: readonly Page[] = ["jobs", "watchlist", "skills"];
 
 // Saved only when the user picks a view. (Renamed from "jobpilot.view", which older builds wrote on every launch.)
 const VIEW_KEY = "jobpilot.ui.view";
 const PAGE_KEY = "jobpilot.ui.page";
 const COMPANY_GROUP_KEY = "jobpilot.ui.companyGroup";
+const ROLE_GROUP_KEY = "jobpilot.ui.roleGroup";
 
 function load<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -53,6 +59,15 @@ function load<T extends string>(key: string, allowed: readonly T[], fallback: T)
     return allowed.includes(v as T) ? (v as T) : fallback;
   } catch {
     return fallback;
+  }
+}
+
+function loadGroupId(): number | null {
+  try {
+    const id = Number(localStorage.getItem(ROLE_GROUP_KEY) || NaN);
+    return Number.isInteger(id) ? id : null;
+  } catch {
+    return null;
   }
 }
 
@@ -71,7 +86,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   // Table is the default until the user picks a view.
   const [view, setViewState] = useState<View>(() => load(VIEW_KEY, ["board", "table"], "table"));
-  const [page, setPageState] = useState<Page>(() => load(PAGE_KEY, ["jobs", "watchlist"], "jobs"));
+  const [page, setPageState] = useState<Page>(() => load(PAGE_KEY, PAGES, "jobs"));
   // All or Favorites is remembered between launches; the other company filters until the app closes.
   const [orgFilters, setOrgFiltersState] = useState<CompanyFilters>(() => ({
     ...DEFAULT_COMPANY_FILTERS,
@@ -81,6 +96,16 @@ export default function App() {
     if (filters.group !== orgFilters.group) save(COMPANY_GROUP_KEY, filters.group);
     setOrgFiltersState(filters);
   };
+  const [groups, setGroups] = useState<RoleGroup[]>([]);
+  // The role group shown on Skill Gap is remembered between launches, like All or Favorites.
+  const [gapFilters, setGapFiltersState] = useState<GapFilters>(() => ({ ...DEFAULT_GAP_FILTERS, groupId: loadGroupId() }));
+  const setGapFilters = (filters: GapFilters) => {
+    if (filters.groupId !== gapFilters.groupId) save(ROLE_GROUP_KEY, filters.groupId === null ? "" : String(filters.groupId));
+    setGapFiltersState(filters);
+  };
+  // Bumped when a job changes, so Skill Gap reloads its list.
+  const [gapVersion, setGapVersion] = useState(0);
+  const [aiOpen, setAiOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [modeFilter, setModeFilter] = useState<WorkMode | "">("");
@@ -104,6 +129,10 @@ export default function App() {
     }
   }, []);
 
+  const refreshGroups = useCallback(() => {
+    api.listGroups().then(setGroups, (e) => setError((e as Error).message));
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const [j, o] = await Promise.all([api.listJobs(), api.listCompanies()]);
@@ -119,11 +148,12 @@ export default function App() {
 
   useEffect(() => {
     refresh();
+    refreshGroups();
     api
       .getExtension()
       .then((info) => setPortBlockedBy(info.port_blocked_by))
       .catch(() => {});
-  }, [refresh]);
+  }, [refresh, refreshGroups]);
 
   // Jobs saved from LinkedIn arrive while the window is open; show them when it is focused again.
   useEffect(() => {
@@ -145,9 +175,12 @@ export default function App() {
     save(PAGE_KEY, next);
   }, []);
 
+  // Jobs kept only to study a role stay off the job board.
+  const boardJobs = useMemo(() => jobs.filter((j) => !j.study_only), [jobs]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("tr");
-    return jobs.filter(
+    return boardJobs.filter(
       (j) =>
         (!statusFilter || j.status === statusFilter) &&
         (!modeFilter || j.work_mode === modeFilter) &&
@@ -156,7 +189,7 @@ export default function App() {
         (!q ||
           [j.company, j.title, j.city, j.district].some((v) => v?.toLocaleLowerCase("tr").includes(q))),
     );
-  }, [jobs, query, statusFilter, modeFilter, typeFilter, locationFilter]);
+  }, [boardJobs, query, statusFilter, modeFilter, typeFilter, locationFilter]);
 
   const changeStatus = useCallback(
     async (id: number, status: Status) => {
@@ -195,11 +228,17 @@ export default function App() {
     }
   }, []);
 
-  const upsertJob = (job: Job) => {
-    setJobs((prev) => (prev.some((j) => j.id === job.id) ? prev.map((j) => (j.id === job.id ? job : j)) : [job, ...prev]));
-    // A new job can add a company, and a job can change its company's name or website.
-    refreshOrgs();
-  };
+  const upsertJob = useCallback(
+    (job: Job) => {
+      setJobs((prev) => (prev.some((j) => j.id === job.id) ? prev.map((j) => (j.id === job.id ? job : j)) : [job, ...prev]));
+      // A new job can add a company, and a job can change its company's name or website.
+      refreshOrgs();
+      // ...or become a target, which changes the role groups' counts and the gap list.
+      refreshGroups();
+      setGapVersion((v) => v + 1);
+    },
+    [refreshOrgs, refreshGroups],
+  );
 
   const upsertOrg = (org: Company) => {
     setOrgs((prev) =>
@@ -214,8 +253,9 @@ export default function App() {
     setNewJob({ company: org.name, company_website: org.website });
   };
 
-  const applied = jobs.filter((j) => j.date_applied).length;
-  const active = jobs.filter((j) => ["applied", "screening", "interview", "awaiting"].includes(j.status)).length;
+  const applied = boardJobs.filter((j) => j.date_applied).length;
+  const active = boardJobs.filter((j) => ["applied", "screening", "interview", "awaiting"].includes(j.status)).length;
+  const targetCount = groups.reduce((n, g) => n + g.job_count, 0);
   const openOrg = orgs.find((o) => o.id === openOrgId) ?? null;
 
   return (
@@ -231,8 +271,9 @@ export default function App() {
             value={page}
             onChange={setPage}
             options={[
-              { value: "jobs", label: `Jobs · ${jobs.length}`, icon: <BriefcaseIcon /> },
+              { value: "jobs", label: `Jobs · ${boardJobs.length}`, icon: <BriefcaseIcon /> },
               { value: "watchlist", label: `Companies · ${orgs.length}`, icon: <BuildingIcon /> },
+              { value: "skills", label: `Skill Gap · ${targetCount}`, icon: <TargetIcon /> },
             ]}
           />
           {page === "jobs" && (
@@ -258,7 +299,7 @@ export default function App() {
               { value: "dark", label: "Night", icon: <MoonIcon /> },
             ]}
           />
-          {page === "jobs" ? (
+          {page === "skills" ? null : page === "jobs" ? (
             <button className="primary" onClick={() => setNewJob({})}>
               <PlusIcon />
               Add job
@@ -353,6 +394,19 @@ export default function App() {
             <span className="spinner" aria-label="Loading" />
           </div>
         </main>
+      ) : page === "skills" ? (
+        <SkillGap
+          groups={groups}
+          onGroupsChanged={() => {
+            refreshGroups();
+            api.listJobs().then(setJobs).catch(() => {});
+          }}
+          filters={gapFilters}
+          onFiltersChange={setGapFilters}
+          onOpenJob={setOpenId}
+          onOpenAI={() => setAiOpen(true)}
+          refreshKey={gapVersion}
+        />
       ) : page === "watchlist" ? (
         <Watchlist
           orgs={orgs}
@@ -367,7 +421,7 @@ export default function App() {
         />
       ) : (
         <main>
-          {jobs.length === 0 ? (
+          {boardJobs.length === 0 ? (
             <div className="empty hero">
               <span className="logo big" aria-hidden>
                 <BoardIcon />
@@ -380,7 +434,7 @@ export default function App() {
           ) : view === "board" ? (
             <Board
               jobs={filtered}
-              showInbox={jobs.some((j) => j.status === "inbox")}
+              showInbox={boardJobs.some((j) => j.status === "inbox")}
               statusFilter={statusFilter}
               onOpen={setOpenId}
               onStatusChange={changeStatus}
@@ -434,6 +488,8 @@ export default function App() {
 
       {extensionOpen && <ExtensionDialog onClose={() => setExtensionOpen(false)} />}
 
+      {aiOpen && <AISettingsDialog onClose={() => setAiOpen(false)} onSaved={() => setGapVersion((v) => v + 1)} />}
+
       {openId !== null && (
         <JobPanel
           jobId={openId}
@@ -444,6 +500,8 @@ export default function App() {
             setOpenId(null);
           }}
           onWatchChanged={refreshOrgs}
+          groups={groups}
+          onGroupsChanged={refreshGroups}
         />
       )}
     </div>

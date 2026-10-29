@@ -1014,3 +1014,171 @@ button.link.quiet:hover { color: var(--text); }
   border-radius: 10px;
   background: var(--surface-2);
 }
+
+/* ---------- Skill Gap ---------- */
+
+.spinner.tiny { width: 12px; height: 12px; border-width: 2px; }
+.spinner.tiny.dark, .chip .spinner.tiny { border-color: var(--surface-3); border-top-color: var(--accent); }
+button .spinner.tiny { border-color: var(--surface-3); border-top-color: var(--accent); }
+.chip .spinner.tiny { display: inline-block; vertical-align: -2px; margin-right: 3px; }
+.chip.warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); background: color-mix(in srgb, var(--warning) 10%, transparent); }
+.err { color: var(--danger); }
+.warn-text { color: var(--warning); }
+.field-note { font-weight: 400; font-size: 12px; color: var(--muted); }
+.field-note.err { color: var(--danger); }
+
+/* Have / Learning / Gap / Ignore */
+.mark-picker { display: inline-flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); }
+.mark-picker button {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 7px;
+  color: var(--muted);
+}
+.mark-picker button:hover:not(:disabled) { color: var(--text); background: var(--surface-3); transform: none; }
+.mark-picker button.on { color: #fff; }
+.mark-picker .mark-have.on { background: var(--success); }
+.mark-picker .mark-learning.on { background: var(--accent); }
+.mark-picker .mark-gap.on { background: var(--warning); }
+.mark-picker .mark-ignore.on { background: var(--muted); }
+.dot.mark-dot.have { background: var(--success); }
+.dot.mark-dot.learning { background: var(--accent); }
+.dot.mark-dot.gap { background: var(--warning); }
+.dot.mark-dot.ignore, .dot.mark-dot.none { background: var(--muted); }
+
+.group-name { display: flex; gap: 6px; align-items: center; }
+.group-name input { width: 240px; }
+
+.gap-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  animation: rise 0.4s var(--ease-out) both;
+}
+.coverage { display: flex; align-items: center; gap: 16px; }
+.coverage-num { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--accent); min-width: 84px; }
+.coverage-text { flex: 1; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.coverage-text strong { font-size: 14px; }
+.coverage-bar, .demand-bar { height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.coverage-bar { margin-top: 6px; }
+.coverage-bar span, .demand-bar span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 0.5s var(--ease-out); }
+.coverage-bar span { background: var(--success); }
+.gap-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.gap-help { max-width: 460px; line-height: 1.55; margin: 0; }
+
+.gap-table td { vertical-align: middle; }
+.gap-table tr.ignored td { opacity: 0.55; }
+.demand { display: flex; align-items: center; gap: 8px; }
+.demand-bar { flex: 1; }
+.demand .num { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.plan-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 7px; vertical-align: 2px; }
+
+.panel textarea.plan-note { width: 100%; resize: vertical; }
+.evidence { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.evidence li { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.evidence-job {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  text-align: left;
+  color: var(--text);
+}
+.evidence-job:hover:not(:disabled) { background: none; transform: none; color: var(--accent); }
+.evidence-title { flex: 1; min-width: 0; }
+.evidence q { font-size: 13px; color: var(--muted); line-height: 1.45; }
+.imp-tag { flex: none; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--surface-3); color: var(--muted); }
+.imp-tag.must { color: var(--accent); background: var(--glow); }
+
+/* The Skill Gap section of a job */
+.job-skills { margin-top: 8px; }
+.target-row { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.target-row label.inline { margin-top: 0; max-width: none; min-width: 220px; }
+.target-row .row { display: flex; gap: 6px; }
+label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); padding-bottom: 8px; cursor: pointer; }
+.paste { margin-top: 12px; }
+.paste textarea { width: 100%; resize: vertical; }
+.paste .actions { margin-top: 8px; }
+.extract-status { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 12.5px; flex-wrap: wrap; }
+.extract-status .spinner { display: inline-block; vertical-align: -2px; margin-right: 6px; }
+.extract-status button.link.quiet { font-size: 12.5px; }
+.extract-status button svg { width: 13px; height: 13px; }
+.reqs { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.req-head { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+.req-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.req-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  animation: card-in 0.25s var(--ease-out) both;
+  border-left-width: 3px;
+}
+.req-chip.have { border-left-color: var(--success); }
+.req-chip.learning { border-left-color: var(--accent); }
+.req-chip.gap, .req-chip.none { border-left-color: var(--warning); }
+.req-chip.ignore { opacity: 0.55; }
+.req-chip button { border: 0; background: none; box-shadow: none; font-size: 12.5px; color: var(--text); }
+.req-chip button:hover:not(:disabled) { background: none; transform: none; }
+.req-name { padding: 3px 4px 3px 9px; font-weight: 500; }
+.req-remove { padding: 3px 7px 3px 2px; color: var(--muted); }
+.req-chip .req-remove svg { width: 12px; height: 12px; color: var(--muted); }
+.req-chip .req-remove:hover svg { color: var(--danger); }
+.req-add { display: flex; gap: 6px; margin-top: 12px; }
+.req-add input { flex: 1; }
+
+/* AI model dialog */
+.ai-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ai-choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.ai-choice:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.ai-choice.on { border-color: var(--accent); background: var(--glow); }
+.ai-choice input { margin-top: 2px; accent-color: var(--accent); }
+.ai-choice > span { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.4; }
+.ai-choice strong { font-size: 13.5px; }
+.ai-fields { margin-top: 16px; }
+.ai-fields .row { display: flex; gap: 6px; }
+.ai-fields .row > input { flex: 1; min-width: 0; }
+.ai-fields .row > select { width: 170px; flex: none; }
+.ai-test {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
+}
+.ai-test svg { flex: none; margin-top: 1px; }
+
+@media (max-width: 700px) {
+  .ai-choices { grid-template-columns: 1fr; }
+  .coverage { flex-direction: column; align-items: flex-start; gap: 6px; }
+}
