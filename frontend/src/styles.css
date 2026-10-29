@@ -330,6 +330,7 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
 .search { position: relative; display: flex; align-items: center; min-width: 260px; }
 .search svg { position: absolute; left: 10px; color: var(--muted); pointer-events: none; }
 .search input { width: 100%; padding-left: 32px; }
+.search.compact { min-width: 190px; flex: 1; max-width: 260px; }
 
 .error {
   padding: 9px 12px;
@@ -545,7 +546,7 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
 .panel-head .logo-img, .panel-head .logo-initials { border-radius: 12px; margin-top: 2px; }
 .panel-title { flex: 1; min-width: 0; }
 
-/* ---------- watchlist ---------- */
+/* ---------- companies ---------- */
 
 .toolbar-note { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .modal-hint { margin: -10px 0 16px; color: var(--muted); font-size: 13px; line-height: 1.5; }
@@ -841,6 +842,7 @@ td.num { font-variant-numeric: tabular-nums; }
 }
 .overlay.closing .modal { animation: modal-out 0.18s ease both; }
 .modal h2 { margin-bottom: 18px; font-size: 18px; }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 
 .panel {
   margin-left: auto;

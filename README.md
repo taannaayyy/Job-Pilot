@@ -12,7 +12,7 @@ A local, single-user macOS app for tracking job applications. Everything stays o
 - **Company logos.** Add a company's website and its logo appears next to the name. Companies without a website get a colored badge with their initials. Each logo is downloaded once and saved on your Mac.
 - **Istanbul locations.** City defaults to Istanbul. Pick a district, or just a side ("All of Anadolu Yakası"), from a searchable list grouped by Anadolu Yakası and Avrupa Yakası. Or choose "Other city" and type it.
 - **Search and filters.** Search by company, title or district, and filter by status, job type, work mode and location (Anadolu, Avrupa or other cities).
-- **Watchlist.** Save the companies, startups, research centers and universities you would like to work at, even before they have a job you want. Each card links to its careers page and its LinkedIn jobs, and records whether it was hiring when you last checked. Cards that haven't been checked for two weeks are marked as due. Add a job there in one click, or star a company from any job.
+- **Companies.** Every company you have interacted with is listed, whether it came in through a job or you added it by hand: companies, startups, research centers and universities. Star your **favorites** and switch between All and Favorites. Each card links to its careers page and its LinkedIn jobs, and records whether it was hiring when you last checked. Cards that haven't been checked for two weeks are marked as due. Add a job there in one click.
 - **Company deduplication.** "Acme AI" and "acme ai" count as the same company.
 - **Light, night and system themes.** The native title bar follows the theme.
 - **Native macOS window** with the usual shortcuts.

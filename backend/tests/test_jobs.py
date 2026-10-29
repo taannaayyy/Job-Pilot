@@ -288,3 +288,12 @@ def test_awaiting_decision_status(client):
     assert res["date_applied"] is not None  # past the interviews means applied
     org = client.post("/api/companies", json={"name": "Acme AI"}).json()
     assert org["active_job_count"] == 1
+
+
+def test_all_companies_and_favorites(client):
+    client.post("/api/companies", json={"name": "Favorite Lab"})
+    client.post("/api/companies", json={"name": "Just Noted Co", "watching": False})
+    make_job(client, company="From A Job", status="rejected")
+
+    assert {c["name"] for c in client.get("/api/companies").json()} == {"Favorite Lab", "Just Noted Co", "From A Job"}
+    assert [c["name"] for c in client.get("/api/companies?watching=true").json()] == ["Favorite Lab"]

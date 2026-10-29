@@ -3,11 +3,14 @@ import { daysSince, fmtAgo } from "../format";
 import { STALE_AFTER_DAYS, linkedinJobsUrl } from "../orgs";
 import { ORG_KINDS, ORG_KIND_LABELS, type Company, type Job, type Openings, type OrgKind } from "../types";
 import CompanyLogo from "./CompanyLogo";
+import FavoriteButton from "./FavoriteButton";
 import HiringButtons from "./HiringButtons";
-import { BriefcaseIcon, ExternalIcon, EyeIcon, GlobeIcon, PlusIcon, SearchIcon } from "./Icons";
+import Segmented from "./Segmented";
+import { BriefcaseIcon, BuildingIcon, ExternalIcon, GlobeIcon, PlusIcon, SearchIcon, StarIcon } from "./Icons";
 
 type HiringFilter = "" | Openings | "unchecked" | "due";
 type Sort = "name" | "checked" | "added";
+type Group = "all" | "favorites";
 
 interface Props {
   orgs: Company[];
@@ -16,15 +19,17 @@ interface Props {
   onAdd: () => void;
   onAddJob: (org: Company) => void;
   onSetOpenings: (id: number, openings: Openings) => void;
+  onToggleFavorite: (org: Company) => void;
 }
 
 const isDue = (o: Company) => !o.last_checked_at || daysSince(o.last_checked_at) > STALE_AFTER_DAYS;
 
-export default function Watchlist({ orgs, jobs, onOpen, onAdd, onAddJob, onSetOpenings }: Props) {
+export default function Watchlist({ orgs, jobs, onOpen, onAdd, onAddJob, onSetOpenings, onToggleFavorite }: Props) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<OrgKind | "">("");
   const [hiring, setHiring] = useState<HiringFilter>("");
   const [sort, setSort] = useState<Sort>("name");
+  const [group, setGroup] = useState<Group>("all");
 
   const jobCounts = useMemo(() => {
     const counts = new Map<number, number>();
@@ -36,6 +41,7 @@ export default function Watchlist({ orgs, jobs, onOpen, onAdd, onAddJob, onSetOp
     const q = query.trim().toLocaleLowerCase("tr");
     const list = orgs.filter(
       (o) =>
+        (group === "all" || o.watching) &&
         (!kind || o.kind === kind) &&
         (!hiring ||
           (hiring === "unchecked" ? !o.openings : hiring === "due" ? isDue(o) : o.openings === hiring)) &&
@@ -48,7 +54,7 @@ export default function Watchlist({ orgs, jobs, onOpen, onAdd, onAddJob, onSetOp
       added: (a, b) => (b.date_watched ?? "").localeCompare(a.date_watched ?? ""),
     };
     return list.sort(by[sort]);
-  }, [orgs, query, kind, hiring, sort]);
+  }, [orgs, query, kind, hiring, sort, group]);
 
   const hiringCount = orgs.filter((o) => o.openings === "hiring").length;
   const dueCount = orgs.filter(isDue).length;
@@ -56,9 +62,18 @@ export default function Watchlist({ orgs, jobs, onOpen, onAdd, onAddJob, onSetOp
   return (
     <>
       <div className="toolbar">
-        <label className="search">
+        <Segmented
+          ariaLabel="Show"
+          value={group}
+          onChange={setGroup}
+          options={[
+            { value: "all", label: `All · ${orgs.length}` },
+            { value: "favorites", label: `Favorites · ${orgs.filter((o) => o.watching).length}`, icon: <StarIcon filled /> },
+          ]}
+        />
+        <label className="search compact">
           <SearchIcon />
-          <input type="search" placeholder="Search watchlist" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input type="search" placeholder="Search companies" value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
         <select value={kind} onChange={(e) => setKind(e.target.value as OrgKind | "")}>
           <option value="">All types</option>
@@ -70,34 +85,38 @@ export default function Watchlist({ orgs, jobs, onOpen, onAdd, onAddJob, onSetOp
         </select>
         <select value={hiring} onChange={(e) => setHiring(e.target.value as HiringFilter)}>
           <option value="">Any hiring status</option>
-          <option value="hiring">Hiring</option>
-          <option value="none">Not hiring</option>
-          <option value="unchecked">Not checked yet</option>
-          <option value="due">Due for a check</option>
+          <option value="hiring">Hiring · {hiringCount}</option>
+          <option value="none">Not hiring · {orgs.filter((o) => o.openings === "none").length}</option>
+          <option value="unchecked">Not checked yet · {orgs.filter((o) => !o.openings).length}</option>
+          <option value="due">Due for a check · {dueCount}</option>
         </select>
         <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
           <option value="name">Sort by name</option>
           <option value="checked">Least recently checked</option>
           <option value="added">Recently added</option>
         </select>
-        <span className="toolbar-note">
-          {hiringCount} hiring · {dueCount} due for a check
-        </span>
       </div>
 
       <main>
         {orgs.length === 0 ? (
           <div className="empty hero">
             <span className="logo big" aria-hidden>
-              <EyeIcon />
+              <BuildingIcon />
             </span>
-            <p>Save companies, labs and universities you would like to work at, then check them for openings.</p>
+            <p>
+              Every company you save a job at shows up here. Add companies, labs and universities you would like to work
+              at, and star your favorites.
+            </p>
             <button className="primary" onClick={onAdd}>
               <PlusIcon /> Add your first one
             </button>
           </div>
         ) : shown.length === 0 ? (
-          <p className="empty">Nothing on the watchlist matches these filters.</p>
+          <p className="empty">
+            {group === "favorites" && !orgs.some((o) => o.watching)
+              ? "No favorites yet. Click Favorite on a company to add it here."
+              : "No company matches these filters."}
+          </p>
         ) : (
           <div className="org-grid">
             {shown.map((o, i) => {
@@ -153,6 +172,7 @@ export default function Watchlist({ orgs, jobs, onOpen, onAdd, onAddJob, onSetOp
 
                   <footer className="org-foot">
                     <HiringButtons small value={o.openings} onChange={(v) => onSetOpenings(o.id, v)} />
+                    <FavoriteButton name={o.name} favorite={o.watching} onToggle={() => onToggleFavorite(o)} />
                     <button
                       className="small"
                       title="Add a job at this organization"

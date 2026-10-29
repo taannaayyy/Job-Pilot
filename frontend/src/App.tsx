@@ -9,7 +9,7 @@ import {
   AutoIcon,
   BoardIcon,
   BriefcaseIcon,
-  EyeIcon,
+  BuildingIcon,
   MoonIcon,
   PlusIcon,
   PuzzleIcon,
@@ -88,7 +88,7 @@ export default function App() {
 
   const refreshOrgs = useCallback(async () => {
     try {
-      setOrgs(await api.listWatchlist());
+      setOrgs(await api.listCompanies());
     } catch (e) {
       setError((e as Error).message);
     }
@@ -96,7 +96,7 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [j, o] = await Promise.all([api.listJobs(), api.listWatchlist()]);
+      const [j, o] = await Promise.all([api.listJobs(), api.listCompanies()]);
       setJobs(j);
       setOrgs(o);
       setError(null);
@@ -117,10 +117,13 @@ export default function App() {
 
   // Jobs saved from LinkedIn arrive while the window is open; show them when it is focused again.
   useEffect(() => {
-    const onFocus = () => api.listJobs().then(setJobs).catch(() => {});
+    const onFocus = () => {
+      api.listJobs().then(setJobs).catch(() => {});
+      refreshOrgs();
+    };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, []);
+  }, [refreshOrgs]);
 
   const setView = useCallback((next: View) => {
     setViewState(next);
@@ -159,6 +162,20 @@ export default function App() {
     [refresh],
   );
 
+  const toggleFavorite = useCallback(
+    async (org: Company) => {
+      try {
+        await api.updateCompany(org.id, { watching: !org.watching });
+        await refreshOrgs();
+        // Jobs show whether their company is a favorite.
+        setJobs(await api.listJobs());
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    [refreshOrgs],
+  );
+
   const setOpenings = useCallback(async (id: number, openings: Openings) => {
     try {
       const updated = await api.updateCompany(id, { openings });
@@ -170,7 +187,7 @@ export default function App() {
 
   const upsertJob = (job: Job) => {
     setJobs((prev) => (prev.some((j) => j.id === job.id) ? prev.map((j) => (j.id === job.id ? job : j)) : [job, ...prev]));
-    // A job can change its company's name or website, which the watchlist shows too.
+    // A new job can add a company, and a job can change its company's name or website.
     refreshOrgs();
   };
 
@@ -205,7 +222,7 @@ export default function App() {
             onChange={setPage}
             options={[
               { value: "jobs", label: `Jobs · ${jobs.length}`, icon: <BriefcaseIcon /> },
-              { value: "watchlist", label: `Watchlist · ${orgs.length}`, icon: <EyeIcon /> },
+              { value: "watchlist", label: `Companies · ${orgs.length}`, icon: <BuildingIcon /> },
             ]}
           />
           {page === "jobs" && (
@@ -334,6 +351,7 @@ export default function App() {
           onAdd={() => setCreatingOrg(true)}
           onAddJob={addJobAt}
           onSetOpenings={setOpenings}
+          onToggleFavorite={toggleFavorite}
         />
       ) : (
         <main>
@@ -389,8 +407,8 @@ export default function App() {
           jobs={jobs.filter((j) => j.company_id === openOrg.id)}
           onClose={() => setOpenOrgId(null)}
           onSaved={upsertOrg}
-          onRemoved={(id) => {
-            setOrgs((prev) => prev.filter((o) => o.id !== id));
+          onRemoved={() => {
+            refreshOrgs();
             setOpenOrgId(null);
             api.listJobs().then(setJobs).catch(() => {});
           }}

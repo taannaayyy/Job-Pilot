@@ -7,6 +7,7 @@ import { ORG_KIND_LABELS, STATUS_LABELS, type Company, type CompanyInput, type J
 import CompanyLogo from "./CompanyLogo";
 import HiringButtons from "./HiringButtons";
 import { CheckIcon, CloseIcon, ExternalIcon, PlusIcon } from "./Icons";
+import FavoriteButton from "./FavoriteButton";
 import OrgFields from "./OrgFields";
 
 interface Props {
@@ -87,6 +88,7 @@ export default function OrgPanel({ org, jobs, onClose, onSaved, onRemoved, onOpe
                 )}
               </div>
             </div>
+            <FavoriteButton name={org.name} favorite={org.watching} onToggle={() => update({ watching: !org.watching })} />
             <button type="button" className="icon" aria-label="Close" onClick={close}>
               <CloseIcon />
             </button>
@@ -103,11 +105,12 @@ export default function OrgPanel({ org, jobs, onClose, onSaved, onRemoved, onOpe
           {error && <div className="error">{error}</div>}
 
           <div className="actions">
-            <button
-              type="button"
-              className="danger"
-              onClick={async () => {
-                if (jobs.length === 0) {
+            {/* A company with jobs stays as long as they do. */}
+            {jobs.length === 0 && (
+              <button
+                type="button"
+                className="danger"
+                onClick={async () => {
                   if (!confirm(`Delete ${org.name}? Its notes and links are removed too.`)) return;
                   try {
                     await api.deleteCompany(org.id);
@@ -115,14 +118,11 @@ export default function OrgPanel({ org, jobs, onClose, onSaved, onRemoved, onOpe
                   } catch (err) {
                     setError((err as Error).message);
                   }
-                } else if (await update({ watching: false })) {
-                  onRemoved(org.id);
-                }
-              }}
-              title={jobs.length ? "Its tracked jobs stay as they are" : undefined}
-            >
-              {jobs.length ? "Remove from watchlist" : "Delete"}
-            </button>
+                }}
+              >
+                Delete
+              </button>
+            )}
             <span className="spacer" />
             <button type="button" disabled={!dirty} onClick={() => setInput(toInput(org))}>
               Revert

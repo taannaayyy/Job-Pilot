@@ -3,7 +3,8 @@ import { api } from "../api";
 import { fmtDateTime } from "../format";
 import { STATUS_LABELS, type Job, type JobDetail, type JobInput, type Status } from "../types";
 import { useClosing } from "../useClosing";
-import { CheckIcon, CloseIcon, ExternalIcon, StarIcon } from "./Icons";
+import { CheckIcon, CloseIcon, ExternalIcon } from "./Icons";
+import FavoriteButton from "./FavoriteButton";
 import CompanyLogo from "./CompanyLogo";
 import JobFields from "./JobFields";
 import StatusSelect from "./StatusSelect";
@@ -13,7 +14,7 @@ interface Props {
   onClose: () => void;
   onSaved: (job: Job) => void;
   onDeleted: (id: number) => void;
-  /** The job's company was added to or removed from the watchlist. */
+  /** The job's company was added to or removed from favorites. */
   onWatchChanged: () => void;
 }
 
@@ -104,12 +105,10 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                className={`watch-toggle ${job.company_watching ? "on" : ""}`}
-                title={job.company_watching ? "On your watchlist" : `Add ${job.company} to your watchlist`}
-                aria-pressed={job.company_watching}
-                onClick={async () => {
+              <FavoriteButton
+                name={job.company}
+                favorite={job.company_watching}
+                onToggle={async () => {
                   try {
                     await api.updateCompany(job.company_id, { watching: !job.company_watching });
                     apply(await api.getJob(jobId), false);
@@ -118,10 +117,7 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
                     setError((err as Error).message);
                   }
                 }}
-              >
-                <StarIcon filled={job.company_watching} />
-                {job.company_watching ? "Watching" : "Watch"}
-              </button>
+              />
               <button type="button" className="icon" aria-label="Close" onClick={close}>
                 <CloseIcon />
               </button>

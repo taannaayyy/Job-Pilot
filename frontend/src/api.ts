@@ -27,8 +27,8 @@ export const api = {
   updateJob: (id: number, body: Partial<JobInput>) =>
     request<JobDetail>(`/jobs/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteJob: (id: number) => request<void>(`/jobs/${id}`, { method: "DELETE" }),
-  listWatchlist: () => request<Company[]>("/companies?watching=true"),
-  createCompany: (body: CompanyInput) => request<Company>("/companies", { method: "POST", body: JSON.stringify(body) }),
+  listCompanies: () => request<Company[]>("/companies"),
+  createCompany: (body: CompanyInput & { watching?: boolean }) => request<Company>("/companies", { method: "POST", body: JSON.stringify(body) }),
   updateCompany: (
     id: number,
     body: Partial<CompanyInput> & { watching?: boolean; openings?: Openings | null },

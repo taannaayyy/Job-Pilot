@@ -1,15 +1,17 @@
 import { useState } from "react";
 import type { CompanyInput } from "../types";
 import { useClosing } from "../useClosing";
+import FavoriteButton from "./FavoriteButton";
 import OrgFields, { emptyOrg } from "./OrgFields";
 
 interface Props {
   onCancel: () => void;
-  onSubmit: (input: CompanyInput) => Promise<void>;
+  onSubmit: (input: CompanyInput & { watching: boolean }) => Promise<void>;
 }
 
 export default function OrgForm({ onCancel, onSubmit }: Props) {
   const [input, setInput] = useState(emptyOrg);
+  const [favorite, setFavorite] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [closing, close] = useClosing(onCancel);
@@ -24,14 +26,17 @@ export default function OrgForm({ onCancel, onSubmit }: Props) {
           e.preventDefault();
           setBusy(true);
           try {
-            await onSubmit(input);
+            await onSubmit({ ...input, watching: favorite });
           } catch (err) {
             setError((err as Error).message);
             setBusy(false);
           }
         }}
       >
-        <h2>Add to watchlist</h2>
+        <div className="modal-head">
+          <h2>Add organization</h2>
+          <FavoriteButton name={input.name.trim() || "it"} favorite={favorite} onToggle={() => setFavorite(!favorite)} />
+        </div>
         <p className="modal-hint">
           Companies, startups, research centers, universities: anywhere you would like to work. If you already track
           jobs there, they are linked automatically.

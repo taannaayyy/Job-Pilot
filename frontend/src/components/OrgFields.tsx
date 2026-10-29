@@ -51,7 +51,7 @@ export default function OrgFields({ value, onChange, autoFocus }: Props) {
           placeholder="https://www.linkedin.com/company/…"
           value={value.linkedin_url ?? ""}
           onChange={url("linkedin_url")}
-          title="Its LinkedIn jobs tab opens from the watchlist"
+          title="Its LinkedIn jobs tab opens from the company card"
         />
       </label>
       <label className="wide">

@@ -4,7 +4,7 @@ import { useClosing } from "../useClosing";
 import JobFields, { emptyInput } from "./JobFields";
 
 interface Props {
-  /** Prefilled fields, e.g. the organization when adding a job from the watchlist. */
+  /** Prefilled fields, e.g. the organization when adding a job from its company card. */
   initial?: Partial<JobInput>;
   onCancel: () => void;
   onSubmit: (input: JobInput & { status: Status }) => Promise<void>;
