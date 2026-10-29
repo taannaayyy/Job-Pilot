@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { daysSince, fmtAgo } from "../format";
 import { STALE_AFTER_DAYS, linkedinJobsUrl } from "../orgs";
 import { ORG_KINDS, ORG_KIND_LABELS, type Company, type Job, type Openings, type OrgKind } from "../types";
@@ -10,7 +10,19 @@ import { BriefcaseIcon, BuildingIcon, ExternalIcon, GlobeIcon, PlusIcon, SearchI
 
 type HiringFilter = "" | Openings | "unchecked" | "due";
 type Sort = "name" | "checked" | "added";
-type Group = "all" | "favorites";
+export type Group = "all" | "favorites";
+export const GROUPS: readonly Group[] = ["all", "favorites"];
+
+// Kept by the app, so they survive switching to the Jobs page and back.
+export interface CompanyFilters {
+  query: string;
+  kind: OrgKind | "";
+  hiring: HiringFilter;
+  sort: Sort;
+  group: Group;
+}
+
+export const DEFAULT_COMPANY_FILTERS: CompanyFilters = { query: "", kind: "", hiring: "", sort: "name", group: "all" };
 
 interface Props {
   orgs: Company[];
@@ -20,16 +32,30 @@ interface Props {
   onAddJob: (org: Company) => void;
   onSetOpenings: (id: number, openings: Openings) => void;
   onToggleFavorite: (org: Company) => void;
+  filters: CompanyFilters;
+  onFiltersChange: (filters: CompanyFilters) => void;
 }
 
 const isDue = (o: Company) => !o.last_checked_at || daysSince(o.last_checked_at) > STALE_AFTER_DAYS;
 
-export default function Watchlist({ orgs, jobs, onOpen, onAdd, onAddJob, onSetOpenings, onToggleFavorite }: Props) {
-  const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<OrgKind | "">("");
-  const [hiring, setHiring] = useState<HiringFilter>("");
-  const [sort, setSort] = useState<Sort>("name");
-  const [group, setGroup] = useState<Group>("all");
+export default function Watchlist({
+  orgs,
+  jobs,
+  onOpen,
+  onAdd,
+  onAddJob,
+  onSetOpenings,
+  onToggleFavorite,
+  filters,
+  onFiltersChange,
+}: Props) {
+  const { query, kind, hiring, sort, group } = filters;
+  const set = (patch: Partial<CompanyFilters>) => onFiltersChange({ ...filters, ...patch });
+  const setQuery = (query: string) => set({ query });
+  const setKind = (kind: OrgKind | "") => set({ kind });
+  const setHiring = (hiring: HiringFilter) => set({ hiring });
+  const setSort = (sort: Sort) => set({ sort });
+  const setGroup = (group: Group) => set({ group });
 
   const jobCounts = useMemo(() => {
     const counts = new Map<number, number>();

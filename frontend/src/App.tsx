@@ -20,7 +20,7 @@ import {
 import OrgForm from "./components/OrgForm";
 import OrgPanel from "./components/OrgPanel";
 import Segmented from "./components/Segmented";
-import Watchlist from "./components/Watchlist";
+import Watchlist, { type CompanyFilters, DEFAULT_COMPANY_FILTERS, GROUPS } from "./components/Watchlist";
 import { useTheme } from "./theme";
 import { SIDE_LABELS, matchesLocation, type LocationFilter } from "./locations";
 import {
@@ -45,6 +45,7 @@ type Page = "jobs" | "watchlist";
 // Saved only when the user picks a view. (Renamed from "jobpilot.view", which older builds wrote on every launch.)
 const VIEW_KEY = "jobpilot.ui.view";
 const PAGE_KEY = "jobpilot.ui.page";
+const COMPANY_GROUP_KEY = "jobpilot.ui.companyGroup";
 
 function load<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -71,6 +72,15 @@ export default function App() {
   // Table is the default until the user picks a view.
   const [view, setViewState] = useState<View>(() => load(VIEW_KEY, ["board", "table"], "table"));
   const [page, setPageState] = useState<Page>(() => load(PAGE_KEY, ["jobs", "watchlist"], "jobs"));
+  // All or Favorites is remembered between launches; the other company filters until the app closes.
+  const [orgFilters, setOrgFiltersState] = useState<CompanyFilters>(() => ({
+    ...DEFAULT_COMPANY_FILTERS,
+    group: load(COMPANY_GROUP_KEY, GROUPS, "all"),
+  }));
+  const setOrgFilters = (filters: CompanyFilters) => {
+    if (filters.group !== orgFilters.group) save(COMPANY_GROUP_KEY, filters.group);
+    setOrgFiltersState(filters);
+  };
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Status | "">("");
   const [modeFilter, setModeFilter] = useState<WorkMode | "">("");
@@ -352,6 +362,8 @@ export default function App() {
           onAddJob={addJobAt}
           onSetOpenings={setOpenings}
           onToggleFavorite={toggleFavorite}
+          filters={orgFilters}
+          onFiltersChange={setOrgFilters}
         />
       ) : (
         <main>
