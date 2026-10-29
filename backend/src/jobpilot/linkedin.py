@@ -1,4 +1,4 @@
-"""Reads the text LinkedIn shows on a job page. Nothing here fetches LinkedIn: the Chrome
+"""Reads the text LinkedIn shows on a job or company page. Nothing here fetches LinkedIn: the Chrome
 extension sends what the user already has open."""
 
 import re
@@ -6,11 +6,12 @@ import unicodedata
 from urllib.parse import parse_qs, urlsplit
 
 from jobpilot.locations import ISTANBUL, SIDE_OF
-from jobpilot.models import JobType, WorkMode
+from jobpilot.models import JobType, OrgKind, WorkMode
 
 # /jobs/view/1234567890 and the public /jobs/view/ml-engineer-at-acme-1234567890
 _VIEW_ID = re.compile(r"/jobs/view/(?:[^/?#]*-)?(\d{6,})")
-_COMPANY_SLUG = re.compile(r"/company/([^/?#]+)")
+# Universities have /school/ pages; LinkedIn redirects /company/ links to them.
+_COMPANY_SLUG = re.compile(r"/(?:company|school)/([^/?#]+)")
 
 
 def job_id_from_url(url: str | None) -> str | None:
@@ -39,6 +40,30 @@ def company_slug(url: str | None) -> str | None:
 
 def company_url(slug: str) -> str:
     return f"https://www.linkedin.com/company/{slug}/"
+
+
+def website_from_link(url: str | None) -> str | None:
+    """The company's own site from a "Visit website" link, which LinkedIn sometimes wraps
+    in /redir/redirect?url=... . None for LinkedIn's own pages."""
+    if not url:
+        return None
+    parts = urlsplit(url)
+    if (parts.hostname or "").endswith("linkedin.com"):
+        url = parse_qs(parts.query).get("url", [""])[0]
+        parts = urlsplit(url)
+        if not url or (parts.hostname or "").endswith("linkedin.com"):
+            return None
+    return url if parts.scheme in ("http", "https") and parts.hostname else None
+
+
+def parse_org_kind(industry: str | None, url: str | None = None) -> OrgKind:
+    """'Higher Education' or a /school/ page -> university, 'Research Services' -> research."""
+    text = fold(industry or "")
+    if "/school/" in (url or "") or re.search(r"higher education|universit|egitim kurumlari", text):
+        return OrgKind.UNIVERSITY
+    if re.search(r"research|arastirma", text):
+        return OrgKind.RESEARCH
+    return OrgKind.COMPANY
 
 
 def fold(text: str) -> str:

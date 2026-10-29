@@ -1,4 +1,4 @@
-// Receives captures from the LinkedIn page, keeps them in a queue while Job Pilot is closed
+// Receives captures (jobs and companies) from LinkedIn pages, keeps them in a queue while Job Pilot is closed
 // (the app only runs while its window is open), and delivers them when it is running.
 
 import { apiUrl, checkConnection, getSettings } from "./lib.js";
@@ -19,7 +19,7 @@ async function updateBadge(count) {
   await chrome.action.setBadgeBackgroundColor({ color: "#d97706" });
   await chrome.action.setBadgeText({ text: count ? String(count) : "" });
   await chrome.action.setTitle({
-    title: count ? `Job Pilot: ${count} saved job${count > 1 ? "s" : ""} waiting for the app` : "Job Pilot",
+    title: count ? `Job Pilot: ${count} saved item${count > 1 ? "s" : ""} waiting for the app` : "Job Pilot",
   });
 }
 
@@ -43,9 +43,22 @@ async function fetchLogo(url) {
   }
 }
 
-/** One delivery attempt. Returns {state: "saved" | "duplicate" | "rejected", ...} or throws when the app can't be reached. */
-async function deliver(payload, { token, port }) {
-  const res = await fetch(apiUrl(port, "/capture"), {
+// Where each kind of capture goes, and what identifies it in the queue.
+const KINDS = {
+  job: { path: "/capture", key: (payload) => payload.linkedin_job_id },
+  company: { path: "/capture/company", key: (payload) => payload.url && new URL(payload.url).pathname.split("/")[2] },
+};
+
+// Items queued by older versions are jobs without a kind.
+const kindOf = (item) => item.kind ?? "job";
+const sameItem = (a, b) => kindOf(a) === kindOf(b) && KINDS[kindOf(a)].key(a.payload) === KINDS[kindOf(b)].key(b.payload);
+
+/**
+ * One delivery attempt. Returns {state: "saved" | "duplicate" | "favorited" | "rejected", ...}
+ * or throws when the app can't be reached.
+ */
+async function deliver({ kind = "job", payload }, { token, port }) {
+  const res = await fetch(apiUrl(port, KINDS[kind].path), {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-JobPilot-Token": token },
     body: JSON.stringify(payload),
@@ -54,6 +67,7 @@ async function deliver(payload, { token, port }) {
   if (res.status === 401) throw new Error("bad_token");
   const body = await res.json().catch(() => ({}));
   if (!res.ok) return { state: "rejected", message: typeof body.detail === "string" ? body.detail : `Error ${res.status}` };
+  if (kind === "company") return { state: body.created ? "saved" : body.was_favorite ? "duplicate" : "favorited" };
   return { state: body.created ? "saved" : "duplicate", job: body.job };
 }
 
@@ -69,12 +83,12 @@ function flush() {
         const [next] = await getQueue();
         if (!next) return;
         try {
-          await deliver(next.payload, settings);
+          await deliver(next, settings);
         } catch {
           return; // closed again, or the key changed; try later
         }
         // Delivered, already saved, or refused by the app: none of these get better by retrying.
-        await setQueue((await getQueue()).filter((item) => item.payload.linkedin_job_id !== next.payload.linkedin_job_id));
+        await setQueue((await getQueue()).filter((item) => !sameItem(item, next)));
       }
     } finally {
       flushing = null;
@@ -83,12 +97,13 @@ function flush() {
   return flushing;
 }
 
-async function capture(payload, logoUrl) {
-  payload = { ...payload, logo_base64: await fetchLogo(logoUrl) };
+async function capture(kind, payload, logoUrl) {
+  if (!KINDS[kind]) throw new Error("Unknown page");
+  const item = { kind, payload: { ...payload, logo_base64: await fetchLogo(logoUrl) } };
   const settings = await getSettings();
   if (settings.token) {
     try {
-      const result = await deliver(payload, settings);
+      const result = await deliver(item, settings);
       flush(); // the app is up: send anything still waiting
       return result;
     } catch {
@@ -96,8 +111,8 @@ async function capture(payload, logoUrl) {
     }
   }
   const queue = await getQueue();
-  if (!queue.some((item) => item.payload.linkedin_job_id === payload.linkedin_job_id)) {
-    queue.push({ payload, queuedAt: Date.now() });
+  if (!queue.some((queued) => sameItem(queued, item))) {
+    queue.push({ ...item, queuedAt: Date.now() });
     await setQueue(queue);
   }
   return { state: "queued", reason: await checkConnection(settings), queued: queue.length };
@@ -109,7 +124,7 @@ async function status() {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const handlers = {
-    capture: () => capture(message.payload, message.logoUrl),
+    capture: () => capture(message.kind ?? "job", message.payload, message.logoUrl),
     status,
     sync: async () => {
       await flush();

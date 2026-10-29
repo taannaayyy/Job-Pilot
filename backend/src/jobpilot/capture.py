@@ -1,4 +1,4 @@
-"""Endpoints for the Chrome extension, which saves LinkedIn job pages the user has open.
+"""Endpoints for the Chrome extension, which saves the LinkedIn job and company pages the user has open.
 
 The extension proves itself with a random key the app makes once and the user pastes into
 the extension's settings. The app sends no CORS headers, so websites can neither read
@@ -18,12 +18,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from jobpilot import config, linkedin, system
-from jobpilot.api import _get_or_create_company, _set_status, _to_out, get_session, set_linkedin_job_id
+from jobpilot.api import _company_out, _get_or_create_company, _set_status, _to_out, get_session, set_linkedin_job_id
 from jobpilot.db import utcnow
 from jobpilot.locations import normalize_location
-from jobpilot.logos import MAX_LOGO_BYTES, sniff_media_type
+from jobpilot.logos import MAX_LOGO_BYTES, normalize_website, sniff_media_type
 from jobpilot.models import Company, Job, JobStatus
-from jobpilot.schemas import JobOut
+from jobpilot.schemas import CompanyOut, JobOut
 
 router = APIRouter(prefix="/api")
 
@@ -103,11 +103,11 @@ class CaptureOut(BaseModel):
     job: JobOut
 
 
-def _company_for(session: Session, body: CaptureIn) -> Company:
-    slug = linkedin.company_slug(body.company_linkedin_url)
+def _company_for(session: Session, name: str, linkedin_url: str | None) -> Company:
+    slug = linkedin.company_slug(linkedin_url)
     company = session.scalar(select(Company).where(Company.linkedin_slug == slug)) if slug else None
     if company is None:
-        company = _get_or_create_company(session, body.company)
+        company = _get_or_create_company(session, name)
     if slug and company.linkedin_slug is None:
         # Two companies can't share a slug; a renamed company is found by its slug above instead.
         company.linkedin_slug = slug
@@ -138,7 +138,7 @@ def capture(body: CaptureIn, request: Request, session: Session = Depends(get_se
     if existing is not None:
         return CaptureOut(created=False, job=_to_out(existing))
 
-    company = _company_for(session, body)
+    company = _company_for(session, body.company, body.company_linkedin_url)
     city, district = linkedin.parse_location(body.location)
     job = Job(
         company=company,
@@ -155,11 +155,55 @@ def capture(body: CaptureIn, request: Request, session: Session = Depends(get_se
     session.add(job)
     session.flush()  # gives a new company its id for the logo file
 
-    if logo := _decode_logo(body.logo_base64):
-        request.app.state.logos.put_captured(company.id, logo)
-        company.logo_source = "linkedin"
+    _store_logo(request, company, body.logo_base64)
     session.commit()
     return CaptureOut(created=True, job=_to_out(job))
+
+
+def _store_logo(request: Request, company: Company, raw: str | None) -> None:
+    if logo := _decode_logo(raw):
+        request.app.state.logos.put_captured(company.id, logo)
+        company.logo_source = "linkedin"
+
+
+class CompanyCaptureIn(BaseModel):
+    url: str = Field(max_length=2000)
+    name: str = Field(min_length=1, max_length=200)
+    # The "Visit website" link; may be LinkedIn's redirect link.
+    website: str | None = Field(default=None, max_length=2000)
+    industry: str | None = Field(default=None, max_length=200)
+    logo_base64: str | None = Field(default=None, max_length=MAX_LOGO_BYTES * 4 // 3 + 4)
+
+
+class CompanyCaptureOut(BaseModel):
+    created: bool
+    # Already a favorite before this capture.
+    was_favorite: bool
+    company: CompanyOut
+
+
+@router.post("/capture/company", response_model=CompanyCaptureOut, dependencies=[Depends(require_token)])
+def capture_company(body: CompanyCaptureIn, request: Request, session: Session = Depends(get_session)):
+    """Saves a LinkedIn company page as a favorite, or makes the saved company one."""
+    if linkedin.company_slug(body.url) is None:
+        raise HTTPException(422, "Not a LinkedIn company page")
+    company = _company_for(session, body.name.strip(), body.url)
+    created = company.id is None
+    was_favorite = bool(company.watching)
+    if created:
+        company.kind = linkedin.parse_org_kind(body.industry, body.url)
+    if not company.website:
+        try:
+            company.website = normalize_website(linkedin.website_from_link(body.website))
+        except ValueError:
+            pass  # not a usable link; the website can be typed in later
+    if not company.watching:
+        company.watching = True
+        company.date_watched = utcnow()
+    session.flush()
+    _store_logo(request, company, body.logo_base64)
+    session.commit()
+    return CompanyCaptureOut(created=created, was_favorite=was_favorite, company=_company_out(company))
 
 
 class ExtensionInfo(BaseModel):

@@ -4,7 +4,7 @@ A local, single-user macOS app for tracking job applications. Everything stays o
 
 ## Features
 
-- **Save jobs from LinkedIn.** A Chrome extension adds a **Save to Job Pilot** button to LinkedIn job pages. One click saves the title, company, company logo, location, work mode, job type and description. The same posting is never saved twice, even if you also pasted its link by hand. Jobs you save while Job Pilot is closed wait in the extension and are added the next time you open the app.
+- **Save jobs from LinkedIn.** A Chrome extension adds a **Save to Job Pilot** button to LinkedIn job pages. One click saves the title, company, company logo, location, work mode, job type and description. The same posting is never saved twice, even if you also pasted its link by hand. On a LinkedIn company or university page the same button saves the company to your favorites, with its logo, LinkedIn page, website and type. Whatever you save while Job Pilot is closed waits in the extension and is added the next time you open the app.
 - **Board and table views.** Use the kanban board with drag and drop, or a sortable table.
 - **Statuses.** A job moves through Saved, Applied, Screening, Interview, Awaiting decision (all interviews done, waiting for their answer), Offer, Rejected and Ghosted.
 - **Automatic applied date.** It is stamped the first time a job moves to Applied or a later stage.
@@ -37,7 +37,7 @@ Open **Job Pilot** from Spotlight or Launchpad.
 
 Chrome doesn't let apps install extensions themselves, so this is done once by hand. Publishing to the Chrome Web Store, which would make it a one-click install, is planned.
 
-The extension only reads the job page you have open when you click its button. It never browses LinkedIn on its own. After updating the app, click **Open Chrome** again and press the reload button on the extension.
+The extension only reads the job or company page you have open when you click its button. It never browses LinkedIn on its own. After updating the app, click **Open Chrome** again and press the reload button on the extension.
 
 The app runs only while its window is open. Closing the window stops it completely, and nothing starts at login.
 
@@ -130,7 +130,7 @@ backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
   src/jobpilot/
     api.py               REST endpoints under /api
     capture.py           Endpoints for the Chrome extension
-    linkedin.py          Reads LinkedIn job IDs, locations and job types
+    linkedin.py          Reads LinkedIn job IDs, locations, job types and company pages
     logos.py             Fetches and caches company logos
     models.py            Database tables
     desktop.py           Native window: backend thread, port, size, theme
@@ -144,7 +144,7 @@ frontend/                React + TypeScript + Vite
     components/          Board, table, form, detail panel
     styles.css           Themes and animations
 extension/               Chrome extension (Manifest V3)
-  content.js             Button on LinkedIn job pages, reads the open job
+  content.js             Button on LinkedIn job and company pages, reads the open page
   background.js          Queue while the app is closed, delivery to the app
 packaging/               PyInstaller spec, build script, icon
 dev.sh                   Runs backend + UI for development

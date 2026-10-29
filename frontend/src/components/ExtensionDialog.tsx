@@ -71,8 +71,8 @@ export default function ExtensionDialog({ onClose }: Props) {
       >
         <h2 id="ext-title">Chrome extension</h2>
         <p className="modal-hint">
-          Save the LinkedIn job you are looking at with one click. Jobs you save
-          while Job Pilot is closed are added the next time you open it.
+          Save the LinkedIn job or company you are looking at with one click. What you
+          save while Job Pilot is closed is added the next time you open it.
         </p>
 
         {info && (

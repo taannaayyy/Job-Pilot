@@ -181,3 +181,74 @@ def test_migration_fills_linkedin_ids(tmp_path):
     command.upgrade(cfg, "head")
     rows = con.execute("SELECT id, linkedin_job_id FROM job ORDER BY id").fetchall()
     assert rows == [(1, "4012345678"), (2, None), (3, None)]
+
+
+def capture_company(client, token, **overrides):
+    body = {
+        "url": "https://www.linkedin.com/company/acme-ai/about/",
+        "name": "Acme AI",
+        "website": "https://www.linkedin.com/redir/redirect?url=https%3A%2F%2Fwww.acme.ai%2F&urlhash=x",
+        "industry": "Software Development",
+        **overrides,
+    }
+    return client.post("/api/capture/company", json=body, headers={"X-JobPilot-Token": token})
+
+
+def test_company_capture_needs_the_key(client, token):
+    assert capture_company(client, "wrong").status_code == 401
+    assert client.get("/api/companies").json() == []
+
+
+def test_company_capture_adds_a_favorite(client, token):
+    res = capture_company(client, token, logo_base64=base64.b64encode(PNG).decode())
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert (body["created"], body["was_favorite"]) == (True, False)
+    org = body["company"]
+    assert org["watching"] is True and org["date_watched"] is not None
+    assert org["website"] == "https://acme.ai"
+    assert org["linkedin_url"] == "https://www.linkedin.com/company/acme-ai/"
+    assert org["kind"] == "company"
+    assert org["logo_url"].endswith("?src=linkedin")
+    assert client.get(org["logo_url"]).content == PNG
+
+    again = capture_company(client, token).json()
+    assert (again["created"], again["was_favorite"]) == (False, True)
+    assert len(client.get("/api/companies").json()) == 1
+
+
+def test_company_capture_favorites_a_company_from_a_job(client, token):
+    job = capture(client, token).json()["job"]
+    assert client.get(f"/api/companies/{job['company_id']}").json()["watching"] is False
+    # Found by its LinkedIn page even under another name.
+    body = capture_company(client, token, name="Acme Artificial Intelligence").json()
+    assert (body["created"], body["was_favorite"]) == (False, False)
+    assert body["company"]["id"] == job["company_id"]
+    assert body["company"]["name"] == "Acme AI"
+    assert body["company"]["watching"] is True
+
+
+def test_company_capture_keeps_what_the_user_typed(client, token):
+    client.post("/api/companies", json={"name": "Acme AI", "website": "acme.com", "kind": "startup", "watching": False})
+    org = capture_company(client, token).json()["company"]
+    assert (org["website"], org["kind"], org["watching"]) == ("https://acme.com", "startup", True)
+
+
+def test_company_capture_rejects_other_pages(client, token):
+    assert capture_company(client, token, url="https://www.linkedin.com/jobs/view/4012345678/").status_code == 422
+
+
+def test_school_pages_are_universities(client, token):
+    org = capture_company(
+        client, token, url="https://www.linkedin.com/school/ozyegin-university/", name="Özyeğin University",
+        industry="Higher Education", website=None,
+    ).json()["company"]
+    assert (org["kind"], org["website"]) == ("university", None)
+
+
+def test_website_from_link():
+    assert linkedin.website_from_link("https://acme.ai/") == "https://acme.ai/"
+    assert linkedin.website_from_link("https://www.linkedin.com/company/acme/") is None
+    assert linkedin.website_from_link("javascript:alert(1)") is None
+    assert linkedin.parse_org_kind("Research Services") == "research"
+    assert linkedin.parse_org_kind("Yükseköğretim", "https://www.linkedin.com/school/x/") == "university"

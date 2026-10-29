@@ -7,7 +7,7 @@ function show({ connection, queued }) {
   document.getElementById("state").textContent = STATE_TEXT[connection] ?? "Unknown state";
   const queue = document.getElementById("queue");
   queue.hidden = !queued;
-  queue.textContent = `${queued} saved job${queued === 1 ? "" : "s"} waiting to be added to the app.`;
+  queue.textContent = `${queued} saved item${queued === 1 ? "" : "s"} waiting to be added to the app.`;
   document.getElementById("sync").hidden = !queued || connection !== "ok";
 }
 

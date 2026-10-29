@@ -38,6 +38,6 @@ export const STATE_TEXT = {
   ok: "Connected to Job Pilot",
   no_token: "Paste the extension key from Job Pilot in the settings",
   bad_token: "The extension key is wrong. Copy it again from Job Pilot",
-  closed: "Job Pilot is closed. Saved jobs sync when you open it",
+  closed: "Job Pilot is closed. What you save syncs when you open it",
   other_app: "Another program is using the port. Quit it, then reopen Job Pilot",
 };

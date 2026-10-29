@@ -1,15 +1,31 @@
-// Runs on LinkedIn job pages. Adds a "Save to Job Pilot" button and, when clicked, reads the
-// job the user has open. It never opens pages, scrolls or clicks anything on LinkedIn itself.
+// Runs on LinkedIn. On job and company pages it adds a "Save to Job Pilot" button and, when
+// clicked, reads the page the user has open. It never opens pages, scrolls or clicks anything
+// on LinkedIn itself.
 
 (() => {
   const MAX_DESCRIPTION = 100_000;
 
   function jobIdFromUrl(href) {
     const url = new URL(href);
+    if (!url.pathname.startsWith("/jobs/")) return null;
     const view = url.pathname.match(/\/jobs\/view\/(?:[^/]*-)?(\d{6,})/);
     if (view) return view[1];
     const current = url.searchParams.get("currentJobId");
     return current && /^\d+$/.test(current) ? current : null;
+  }
+
+  /** "acme-ai" on /company/acme-ai/about/; universities have /school/ pages. */
+  function companySlugFromUrl(href) {
+    const m = new URL(href).pathname.match(/^\/(company|school)\/([^/]+)/);
+    return m && !["setup", "unavailable"].includes(m[2]) ? decodeURIComponent(m[2]).toLowerCase() : null;
+  }
+
+  /** What the button saves on this page: {kind: "job" | "company", key} or null. */
+  function pageOf(href) {
+    const jobId = jobIdFromUrl(href);
+    if (jobId) return { kind: "job", key: jobId };
+    const slug = companySlugFromUrl(href);
+    return slug ? { kind: "company", key: slug } : null;
   }
 
   const clean = (s) => (s ?? "").replace(/[ \t ]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim();
@@ -22,19 +38,67 @@
     return null;
   }
 
-  /** Public job pages (and some signed-in ones) describe the job in JSON-LD. */
-  function jsonLdPosting() {
+  /** Public pages (and some signed-in ones) describe the job or company in JSON-LD. */
+  function jsonLd(types) {
     for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
       try {
         const data = JSON.parse(script.textContent);
         const items = [data, ...(data["@graph"] ?? [])].flat();
-        const posting = items.find((d) => d?.["@type"] === "JobPosting");
-        if (posting) return posting;
+        const item = items.find((d) => [d?.["@type"]].flat().some((t) => types.includes(t)));
+        if (item) return item;
       } catch {
         // not JSON we understand
       }
     }
     return null;
+  }
+
+  const isLinkedIn = (href) => {
+    try {
+      return new URL(href).hostname.endsWith("linkedin.com");
+    } catch {
+      return true;
+    }
+  };
+
+  /** The text after a label ("Website", "Industry") in the About page's list. */
+  function aboutField(labels) {
+    for (const dt of document.querySelectorAll("main dt")) {
+      if (!labels.includes(textOf(dt).toLowerCase())) continue;
+      let dd = dt.nextElementSibling;
+      while (dd && dd.tagName !== "DD") dd = dd.nextElementSibling;
+      if (dd) return dd;
+    }
+    return null;
+  }
+
+  function extractCompany() {
+    const ld = jsonLd(["Organization", "Corporation", "CollegeOrUniversity", "EducationalOrganization"]);
+    const main = document.querySelector("main") ?? document.body;
+    const nameEl = first(main, [".org-top-card-summary__title", ".top-card-layout__title", "h1"]);
+    // Browser tab: "Acme AI: About | LinkedIn" or "Acme AI | LinkedIn".
+    const tabName = document.title.replace(/^\(\d+\)\s*/, "").split(" | ")[0].replace(/:\s[^:]*$/, "");
+
+    const logo = [...main.querySelectorAll("img")].find((img) => {
+      const src = img.currentSrc || img.src;
+      return src.startsWith("https://media.licdn.com/") && /(company|school)-logo/.test(src);
+    });
+    const websiteLink =
+      aboutField(["website", "web sitesi"])?.querySelector("a[href]") ??
+      [...main.querySelectorAll("a[href]")].find(
+        (a) => /visit website|web sitesini ziyaret/i.test(textOf(a)) || a.href.includes("/redir/redirect"),
+      );
+    const industry =
+      textOf(aboutField(["industry", "sektör"])) ||
+      textOf(main.querySelector(".org-top-card-summary-info-list__info-item, .top-card-layout__first-subline")).split("·")[0].trim();
+
+    return {
+      url: location.href,
+      name: textOf(nameEl) || ld?.name || (tabName !== "LinkedIn" ? tabName : "") || "",
+      website: websiteLink?.href ?? [ld?.url, ld?.sameAs].flat().find((u) => u && !isLinkedIn(u)) ?? null,
+      industry: industry || null,
+      logoUrl: logo ? logo.currentSrc || logo.src : typeof ld?.logo === "string" ? ld.logo : ld?.logo?.contentUrl ?? ld?.logo?.url ?? null,
+    };
   }
 
   function htmlToText(html) {
@@ -47,7 +111,7 @@
   }
 
   function extract() {
-    const ld = jsonLdPosting();
+    const ld = jsonLd(["JobPosting"]);
     // The pane with the open job; on search pages the list of results sits next to it.
     const pane =
       document.querySelector(".jobs-search__job-details--container, .jobs-details, .job-view-layout, .scaffold-layout__detail") ??
@@ -165,8 +229,11 @@
     other_app: "Another program is using Job Pilot's port. It will be added once the app can be reached.",
   };
 
-  // Result per LinkedIn job, so switching jobs on a search page shows the right state.
+  // Result per job or company ("job:123", "company:acme-ai"), so switching jobs on a search
+  // page shows the right state.
   const results = new Map();
+  let current = null; // pageOf() for the page that is open
+  const keyOf = (page) => (page ? `${page.kind}:${page.key}` : null);
   let currentId = null;
 
   function escape(s) {
@@ -175,15 +242,19 @@
 
   function render() {
     const result = results.get(currentId);
+    const isCompany = current?.kind === "company";
     if (!result) {
-      card.innerHTML = `<button class="save">${ICON.plus} Save to Job Pilot</button>`;
+      card.innerHTML = `<button class="save">${ICON.plus} ${isCompany ? "Save company to Job Pilot" : "Save to Job Pilot"}</button>`;
       card.querySelector(".save").onclick = () => save();
       return;
     }
     if (result.state === "busy") {
       card.innerHTML = `<button disabled><span class="spin"></span> Saving…</button>`;
-    } else if (result.state === "saved" || result.state === "duplicate") {
-      card.innerHTML = `<button class="done" disabled>${ICON.check} ${result.state === "saved" ? "Saved to Job Pilot" : "Already in Job Pilot"}</button>`;
+    } else if (result.state === "saved" || result.state === "duplicate" || result.state === "favorited") {
+      const text = isCompany
+        ? { saved: "Saved to favorites", favorited: "Added to favorites", duplicate: "Already a favorite" }
+        : { saved: "Saved to Job Pilot", duplicate: "Already in Job Pilot" };
+      card.innerHTML = `<button class="done" disabled>${ICON.check} ${text[result.state]}</button>`;
     } else if (result.state === "queued") {
       card.innerHTML = `<button class="wait" disabled>${ICON.clock} Saved, will sync</button>
         <div class="msg">${escape(REASON[result.reason] ?? REASON.closed)}</div>`;
@@ -197,35 +268,34 @@
 
   /** Shown when the page didn't give a title or company (LinkedIn changes its layout now and then). */
   function renderForm(data) {
+    const fields = current.kind === "company" ? [["name", "Company", 200]] : [["title", "Job title", 300], ["company", "Company", 200]];
     card.innerHTML = `
       <form>
-        <div class="msg">Couldn't read everything on this page. Check these:</div>
-        <label>Job title <input name="title" required maxlength="300"></label>
-        <label>Company <input name="company" required maxlength="200"></label>
+        <div class="msg">${fields.length > 1 ? "Couldn't read everything on this page. Check these:" : "Couldn't read the company's name on this page:"}</div>
+        ${fields.map(([name, label, max]) => `<label>${label} <input name="${name}" required maxlength="${max}"></label>`).join("")}
         <div class="row"><button type="button" class="quiet cancel">Cancel</button><button type="submit">${ICON.plus} Save</button></div>
       </form>`;
     const form = card.querySelector("form");
     // Not form.title: that is the form's own title attribute.
-    const title = form.querySelector('[name="title"]');
-    const company = form.querySelector('[name="company"]');
-    title.value = data.title;
-    company.value = data.company;
-    (data.title ? company : title).focus();
+    const inputs = fields.map(([name]) => form.querySelector(`[name="${name}"]`));
+    inputs.forEach((input) => (input.value = data[input.name]));
+    (inputs.find((input) => !input.value) ?? inputs[0]).focus();
     form.querySelector(".cancel").onclick = () => {
       results.delete(currentId);
       render();
     };
     form.onsubmit = (e) => {
       e.preventDefault();
-      send({ ...data, title: title.value.trim(), company: company.value.trim() });
+      send({ ...data, ...Object.fromEntries(inputs.map((input) => [input.name, input.value.trim()])) });
     };
   }
 
   function save() {
-    const data = extract();
-    if (!data.linkedin_job_id) return;
-    if (!data.title || !data.company) {
-      results.set(data.linkedin_job_id, { state: "form", data });
+    if (!current) return;
+    const data = current.kind === "company" ? extractCompany() : extract();
+    const missing = current.kind === "company" ? !data.name : !data.title || !data.company;
+    if (missing) {
+      results.set(currentId, { state: "form", data });
       render();
       return;
     }
@@ -233,13 +303,14 @@
   }
 
   async function send(data) {
-    const id = data.linkedin_job_id;
+    const id = currentId;
+    const { kind } = current;
     const { logoUrl, ...payload } = data;
     results.set(id, { state: "busy" });
     render();
     let result;
     try {
-      result = await chrome.runtime.sendMessage({ type: "capture", payload, logoUrl });
+      result = await chrome.runtime.sendMessage({ type: "capture", kind, payload, logoUrl });
     } catch {
       result = { state: "error", message: "The extension was updated. Reload this page and try again." };
     }
@@ -247,11 +318,13 @@
     if (id === currentId) render();
   }
 
-  // LinkedIn is a single-page app: watch for the open job changing without a page load.
+  // LinkedIn is a single-page app: watch for the open page changing without a page load.
   function sync() {
-    const id = jobIdFromUrl(location.href);
+    const page = pageOf(location.href);
+    const id = keyOf(page);
     host.style.display = id ? "block" : "none";
     if (id !== currentId) {
+      current = page;
       currentId = id;
       if (results.get(id)?.state === "form") results.delete(id);
       render();
