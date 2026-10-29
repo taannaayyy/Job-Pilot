@@ -142,8 +142,6 @@ export default function Watchlist({ orgs, jobs, onOpen, onAdd, onAddJob, onSetOp
                     </span>
                   </header>
 
-                  {o.notes && <p className="org-notes">{o.notes}</p>}
-
                   <div className="org-meta">
                     <span className={due && o.last_checked_at ? "due" : undefined}>
                       {o.last_checked_at ? `Checked ${fmtAgo(o.last_checked_at)}` : "Never checked"}
