@@ -133,7 +133,8 @@ backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
     linkedin.py          Reads LinkedIn job IDs, locations and job types
     logos.py             Fetches and caches company logos
     models.py            Database tables
-    desktop.py           Native window, menus, title bar theme
+    desktop.py           Native window: backend thread, port, size, theme
+    system/              Everything that depends on the OS: macos.py, generic.py (fallback)
     migrations/          Alembic migrations
   tests/
 frontend/                React + TypeScript + Vite

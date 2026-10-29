@@ -9,7 +9,6 @@ import base64
 import binascii
 import secrets
 import shutil
-import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -18,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from jobpilot import config, linkedin
+from jobpilot import config, linkedin, system
 from jobpilot.api import _get_or_create_company, _set_status, _to_out, get_session, set_linkedin_job_id
 from jobpilot.db import utcnow
 from jobpilot.locations import normalize_location
@@ -208,11 +207,11 @@ class InstallOut(BaseModel):
 def install_extension():
     """Opens Chrome's extensions page with the folder path on the clipboard, ready to paste
     into "Load unpacked" (Cmd+Shift+G). Chrome doesn't let apps install extensions themselves."""
-    if subprocess.run(["open", "-Ra", "Google Chrome"], capture_output=True).returncode != 0:
+    if not system.chrome_installed():
         raise HTTPException(404, "Google Chrome isn't installed")
     _copy_extension()
-    subprocess.run(["pbcopy"], input=str(EXTENSION_INSTALL_DIR).encode(), check=False)
-    subprocess.run(["open", "-a", "Google Chrome", "chrome://extensions/"], check=False)
+    system.copy_to_clipboard(str(EXTENSION_INSTALL_DIR))
+    system.open_in_chrome("chrome://extensions/")
     return InstallOut(folder=str(EXTENSION_INSTALL_DIR))
 
 
@@ -220,5 +219,5 @@ def install_extension():
 def reveal_extension():
     """Shows the extension folder in Finder."""
     _copy_extension()
-    subprocess.run(["open", "-R", str(EXTENSION_INSTALL_DIR)], check=False)
+    system.reveal(EXTENSION_INSTALL_DIR)
 

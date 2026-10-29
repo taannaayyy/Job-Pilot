@@ -1,7 +1,10 @@
 import os
 from pathlib import Path
 
-APP_SUPPORT_DIR = Path.home() / "Library" / "Application Support" / "JobPilot"
+from jobpilot import system
+
+# ~/Library/Application Support/JobPilot on macOS.
+APP_SUPPORT_DIR = system.data_dir()
 
 
 def db_path() -> Path:
