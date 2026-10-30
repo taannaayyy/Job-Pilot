@@ -5,6 +5,7 @@ so "pytorch", "PyTorch" and "Torch" count as one skill. Works without any AI mod
 import re
 from dataclasses import dataclass
 
+from jobpilot import taxonomy
 from jobpilot.linkedin import fold
 from jobpilot.models import Importance
 
@@ -172,18 +173,61 @@ _ENTRIES: list[tuple[str, str, tuple[str, ...]]] = [
     ("Stakeholder management", "soft_skill", ("managing stakeholders", "stakeholder communication")),
 ]
 
-CATEGORIES = (
-    "language", "framework", "tool", "cloud", "database", "concept", "practice",
-    "experience", "education", "spoken_language", "soft_skill", "other",
-)  # fmt: skip
+# Where each entry goes in the tree (taxonomy.py): by its kind above, unless named here.
+_GROUP_BY_KIND = {
+    "language": "tech.languages", "framework": "tech.libraries", "tool": "tech.mlops", "cloud": "tech.cloud",
+    "database": "tech.databases", "concept": "know.ml", "practice": "know.swe", "soft_skill": "soft",
+}
+_GROUP_BY_NAME = {
+    "SQL": "tech.databases", "Apache Spark": "tech.data_eng", "Dask": "tech.data_eng", "Ray": "tech.data_eng",
+    "Docker": "tech.cloud", "Kubernetes": "tech.cloud", "Terraform": "tech.cloud", "Linux": "tech.cloud",
+    "Airflow": "tech.data_eng", "Kafka": "tech.data_eng", "dbt": "tech.data_eng", "Databricks": "tech.data_eng",
+    "Snowflake": "tech.databases", "BigQuery": "tech.databases",
+    "Tableau": "tech.bi", "Power BI": "tech.bi", "Looker": "tech.bi", "Excel": "tech.bi",
+    "gRPC": "know.swe", "GraphQL": "know.swe", "REST APIs": "know.swe",
+    "Deep learning": "know.dl", "NLP": "know.dl", "Computer vision": "know.dl", "Transformers": "know.dl",
+    "Speech recognition": "know.dl", "Distributed training": "know.dl",
+    "LLMs": "know.genai", "RAG": "know.genai", "Fine-tuning": "know.genai", "Prompt engineering": "know.genai",
+    "AI agents": "know.genai", "Embeddings": "know.genai",
+    "Statistics": "know.data", "Probability": "know.data", "Linear algebra": "know.data", "A/B testing": "know.data",
+    "Causal inference": "know.data", "Data visualization": "know.data",
+    "ETL": "tech.data_eng", "Data warehousing": "tech.data_eng",
+    "Distributed systems": "know.swe", "Microservices": "know.swe", "System design": "know.swe",
+    "Data structures and algorithms": "know.swe", "Object-oriented programming": "know.swe",
+    "Model evaluation": "know.ml", "Model deployment": "tech.mlops", "Monitoring": "tech.mlops", "MLOps": "tech.mlops",
+    "CI/CD": "tech.mlops", "Research publications": "experience", "Open-source contributions": "experience",
+    "ONNX": "tech.mlops", "TensorRT": "tech.mlops",
+}
+# What a skill belongs to: libraries to their language, cloud services to their cloud.
+PARENTS = {
+    **{lib: "Python" for lib in (
+        "PyTorch", "TensorFlow", "Keras", "JAX", "scikit-learn", "Hugging Face", "XGBoost", "LightGBM", "CatBoost",
+        "pandas", "NumPy", "SciPy", "Polars", "OpenCV", "spaCy", "NLTK", "LangChain", "LangGraph", "LlamaIndex",
+        "vLLM", "FastAPI", "Flask", "Django", "Streamlit", "Matplotlib", "Plotly",
+    )},
+    "React": "JavaScript", "Node.js": "JavaScript", "Spring": "Java", ".NET": "C#",
+    "Amazon SageMaker": "AWS", "Vertex AI": "Google Cloud", "Azure ML": "Azure", "BigQuery": "Google Cloud",
+    **{db: "Vector databases" for db in ("Pinecone", "Weaviate", "Milvus", "Qdrant", "Chroma", "pgvector", "FAISS")},
+}
+
+
+def group_of(name: str, kind: str) -> str:
+    return _GROUP_BY_NAME.get(name) or _GROUP_BY_KIND.get(kind, kind)
 
 
 @dataclass(frozen=True)
 class Found:
     name: str
-    category: str
+    group: str  # a tree key from taxonomy.py
     importance: Importance
     evidence: str
+    min_years: int | None = None
+    max_years: int | None = None
+    detail: str | None = None  # degrees: the fields of study
+
+    @property
+    def parent(self) -> str | None:
+        return PARENTS.get(self.name)
 
 
 def skill_key(name: str) -> str:
@@ -206,7 +250,8 @@ def _alias_pattern(alias: str) -> str:
 
 _BY_KEY: dict[str, tuple[str, str]] = {}
 _PATTERNS: list[tuple[re.Pattern, str, str]] = []
-for _name, _category, _aliases in _ENTRIES:
+for _name, _kind, _aliases in _ENTRIES:
+    _category = group_of(_name, _kind)
     for _alias in (_name, *_aliases):
         if not _alias.startswith(("re:", "=")):
             _BY_KEY.setdefault(skill_key(_alias), (_name, _category))
@@ -218,7 +263,7 @@ for _name, _category, _aliases in _ENTRIES:
 
 
 def lookup(name: str) -> tuple[str, str] | None:
-    """The dictionary's name and category for a name or alias, or None."""
+    """The dictionary's name and tree group key for a name or alias, or None."""
     return _BY_KEY.get(skill_key(name))
 
 
@@ -292,8 +337,38 @@ def _sections(text: str):
 
 
 _YEARS = re.compile(
-    r"(?<![\d.])(\d{1,2})\s*(?:\+|or more|plus)?\s*(?:-|to|–)?\s*(?:\d{1,2}\s*)?\+?\s*(?:years?|yrs?|yıl)", re.IGNORECASE
+    r"(?:(?:at least|minimum|min\.?|over|more than|en az)\s+)?(?<![\d.])(\d{1,2})\s*(?:\+|or more|plus)?\s*"
+    r"(?:(?:-|to|–)\s*(\d{1,2})\s*\+?\s*)?(?:years?|yrs?|yıl)",
+    re.IGNORECASE,
 )
+
+
+def years(text: str) -> tuple[int, int | None] | None:
+    """'3-5 years' -> (3, 5), '2+ years' -> (2, None); None when there are no years."""
+    m = _YEARS.search(text)
+    if not m:
+        return None
+    low, high = int(m.group(1)), int(m.group(2)) if m.group(2) else None
+    if not 0 < low <= 20 or (high is not None and high < low):
+        return None
+    return low, high
+
+
+# "BSc in a quantitative field such as Computer Engineering, Mathematics, or related disciplines"
+_DEGREE_FIELDS = re.compile(
+    r"\b(?:in|on)\s+(?:a\s+|an\s+)?(?:quantitative|relevant|related|technical|stem|similar)?\s*"
+    r"(?:fields?|disciplines?|areas?|subjects?)?\s*(?:such as|like|e\.g\.|including|\(|:)?\s*(.+)",
+    re.IGNORECASE,
+)
+
+
+def degree_fields(clause: str) -> str | None:
+    m = _DEGREE_FIELDS.search(clause)
+    if not m:
+        return None
+    fields = re.split(r",?\s+or\s+(?:a\s+|an\s+|other\s+)?(?:related|equivalent|similar)|\)|;", m.group(1), flags=re.IGNORECASE)[0]
+    fields = fields.strip(" ,.")
+    return fields[:300] or None
 _EDUCATION = [
     ("PhD", re.compile(r"\bph\.?\s?d\b|doctorate|doktora", re.IGNORECASE)),
     ("Master's degree", re.compile(r"\bm\.?sc?\b\.?(?!\w)|master'?s(?! data)|yüksek lisans|\bms degree", re.IGNORECASE)),
@@ -321,28 +396,46 @@ def find(text: str | None) -> list[Found]:
     A skill found in several places keeps its strongest importance (must over nice)."""
     found: dict[str, Found] = {}
 
-    def add(name: str, category: str, importance: Importance, line: str) -> None:
-        current = found.get(name)
-        if current is None or (current.importance == Importance.NICE and importance == Importance.MUST):
-            found[name] = Found(name, category, importance, line[:300])
+    def add(item: Found) -> None:
+        current = found.get(item.name)
+        if current is None:
+            found[item.name] = item
+            return
+        stronger = current.importance == Importance.NICE and item.importance == Importance.MUST
+        found[item.name] = Found(
+            item.name, item.group,
+            Importance.MUST if stronger or current.importance == Importance.MUST else Importance.NICE,
+            item.evidence if stronger else current.evidence,
+            current.min_years if current.min_years is not None else item.min_years,
+            current.max_years if current.min_years is not None else item.max_years,
+            current.detail or item.detail,
+        )
 
     for line, importance in _sections(text or ""):
+        evidence = line[:300]
         degrees = [name for name, pattern in _EDUCATION if pattern.search(line)]
         # "BSc in Mathematics, Statistics or a related field" lists fields of study, not skills.
         field_list = degrees and _FIELDS.search(line)
+        span = years(line)
+        named = []
         for pattern, name, category in _PATTERNS:
             if not field_list and pattern.search(line):
-                add(name, category, importance, line)
-        if m := _YEARS.search(line):
-            years = int(m.group(1))
-            if 1 <= years <= 15:
-                add(f"{years}+ years of experience", "experience", importance, line)
+                named.append((name, category))
+        # "3+ years of Python and SQL": the years are about Python and SQL. Without a skill
+        # named next to them, they are overall experience.
+        about = [n for n in named if n[1] not in ("soft", "experience")]
+        for name, category in named:
+            y = span if span and (name, category) in about else None
+            add(Found(name, category, importance, evidence, y and y[0], y and y[1]))
+        if span and not about and not degrees:
+            add(Found(taxonomy.OVERALL_EXPERIENCE, "experience", importance, evidence, span[0], span[1]))
         # "BSc or MSc": the lower degree is what's required, a higher one is a plus.
         alternatives = len(degrees) > 1 and re.search(r"\bor\b|/|veya|ya da", line, re.IGNORECASE)
+        fields = degree_fields(line) if degrees else None
         for name in degrees:
             lowest = name == degrees[-1]  # _EDUCATION is ordered highest first
-            add(name, "education", importance if lowest or not alternatives else Importance.NICE, line)
+            add(Found(name, "education", importance if lowest or not alternatives else Importance.NICE, evidence, detail=fields))
         for name, pattern in _SPOKEN.items():
             if pattern.search(line) and (_SPOKEN_CONTEXT.search(line) or len(line.split()) <= 3):
-                add(name, "spoken_language", importance, line)
+                add(Found(name, "spoken", importance, evidence))
     return list(found.values())

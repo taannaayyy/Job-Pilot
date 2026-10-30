@@ -148,3 +148,36 @@ export const RefreshIcon = () => (
     <path d="M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4" />
   </svg>
 );
+
+export const ChevronIcon = () => (
+  <svg {...base}>
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+
+export const TreeIcon = () => (
+  <svg {...base}>
+    <rect x="3" y="3" width="7" height="5" rx="1.5" />
+    <rect x="14" y="10" width="7" height="5" rx="1.5" />
+    <rect x="14" y="17" width="7" height="4" rx="1.5" />
+    <path d="M6.5 8v10.5H14M6.5 12.5H14" />
+  </svg>
+);
+
+export const SendIcon = () => (
+  <svg {...base}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </svg>
+);
+
+export const ArrowUpIcon = () => (
+  <svg {...base}>
+    <path d="M12 19V5M6 11l6-6 6 6" />
+  </svg>
+);
+
+export const ArrowDownIcon = () => (
+  <svg {...base}>
+    <path d="M12 5v14M6 13l6 6 6-6" />
+  </svg>
+);

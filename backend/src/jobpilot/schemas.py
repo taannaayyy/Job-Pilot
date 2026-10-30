@@ -114,6 +114,9 @@ class RequirementOut(BaseModel):
     evidence: str | None
     source: str
     mark: SkillMark | None
+    min_years: int | None
+    max_years: int | None
+    detail: str | None
 
 
 class JobDetail(JobOut):

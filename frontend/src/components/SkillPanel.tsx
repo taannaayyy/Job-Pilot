@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { fmtDateTime } from "../format";
-import { SKILL_CATEGORY_LABELS, SKILL_MARK_LABELS, type SkillDetail, type SkillMark } from "../types";
+import { flat, path } from "../tree";
+import { SKILL_MARK_LABELS, type SkillDetail, type SkillGroupNode, type SkillMark, type SkillRow } from "../types";
 import { useClosing } from "../useClosing";
 import { CheckIcon, CloseIcon } from "./Icons";
 import MarkPicker from "./MarkPicker";
@@ -21,7 +22,14 @@ export default function SkillPanel({ skillId, groupId, onClose, onChanged, onOpe
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tree, setTree] = useState<SkillGroupNode[]>([]);
+  const [allSkills, setAllSkills] = useState<SkillRow[]>([]);
   const [closing, close] = useClosing(onClose, 220);
+
+  useEffect(() => {
+    api.listSkillGroups().then(setTree, () => {});
+    api.listSkills().then(setAllSkills, () => {});
+  }, []);
 
   useEffect(() => {
     api.getSkill(skillId, groupId).then(
@@ -39,7 +47,7 @@ export default function SkillPanel({ skillId, groupId, onClose, onChanged, onOpe
     return () => window.removeEventListener("keydown", onKey);
   }, [close]);
 
-  const update = async (body: { mark?: SkillMark | null; plan_note?: string }) => {
+  const update = async (body: { mark?: SkillMark | null; plan_note?: string; group_id?: number | null; parent_id?: number | null }) => {
     try {
       const s = await api.updateSkill(skillId, body, groupId);
       setSkill(s);
@@ -61,7 +69,7 @@ export default function SkillPanel({ skillId, groupId, onClose, onChanged, onOpe
           <>
             <header className="panel-head">
               <div className="panel-title">
-                <div className="card-company">{SKILL_CATEGORY_LABELS[skill.category] ?? skill.category}</div>
+                <div className="card-company">{skill.group_id ? path(tree, skill.group_id) : "Unsorted"}</div>
                 <h2>{skill.name}</h2>
                 <div className="muted">
                   Asked for in {skill.jobs.length} target{skill.jobs.length === 1 ? "" : "s"}
@@ -74,6 +82,43 @@ export default function SkillPanel({ skillId, groupId, onClose, onChanged, onOpe
 
             <h3>Your level</h3>
             <MarkPicker name={skill.name} value={skill.mark} onChange={(mark) => update({ mark })} />
+
+            <h3>Place in the tree</h3>
+            <div className="fields place">
+              <label>
+                Group
+                <select
+                  value={skill.group_id ?? ""}
+                  onChange={(e) => update({ group_id: e.target.value ? Number(e.target.value) : null })}
+                >
+                  <option value="">Unsorted</option>
+                  {flat(tree).map(({ group, depth }) => (
+                    <option key={group.id} value={group.id}>
+                      {"\u00a0\u00a0\u00a0".repeat(depth) + group.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Belongs to
+                <select
+                  value={skill.parent_id ?? ""}
+                  onChange={(e) => update({ parent_id: e.target.value ? Number(e.target.value) : null })}
+                >
+                  <option value="">Nothing</option>
+                  {allSkills
+                    .filter((s) => s.id !== skill.id)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            {skill.group_locked && (
+              <p className="field-note">Placed by you: reading postings again won't move it.</p>
+            )}
 
             <h3>Your plan</h3>
             <textarea
@@ -111,6 +156,12 @@ export default function SkillPanel({ skillId, groupId, onClose, onChanged, onOpe
                     </span>
                     <span className={`imp-tag ${j.importance}`}>{j.importance === "must" ? "Must" : "Nice"}</span>
                   </button>
+                  {(j.years || j.detail) && (
+                    <span className="evidence-meta">
+                      {j.years && <span className="years-tag">{j.years} yrs</span>}
+                      {j.detail && <span className="muted">Fields: {j.detail}</span>}
+                    </span>
+                  )}
                   {j.evidence && <q>{j.evidence}</q>}
                 </li>
               ))}

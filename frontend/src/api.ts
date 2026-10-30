@@ -12,6 +12,8 @@ import type {
   Openings,
   RoleGroup,
   SkillDetail,
+  SkillGroupNode,
+  SkillRow,
   SkillGap,
   SkillMark,
 } from "./types";
@@ -68,7 +70,11 @@ export const api = {
   extractAll: (groupId: number | null) =>
     request<SkillGap>(`/skill-gap/extract${groupQuery(groupId)}`, { method: "POST", body: "{}" }),
   getSkill: (id: number, groupId: number | null) => request<SkillDetail>(`/skills/${id}${groupQuery(groupId)}`),
-  updateSkill: (id: number, body: { mark?: SkillMark | null; plan_note?: string }, groupId: number | null) =>
+  updateSkill: (
+    id: number,
+    body: { mark?: SkillMark | null; plan_note?: string; group_id?: number | null; parent_id?: number | null },
+    groupId: number | null,
+  ) =>
     request<SkillDetail>(`/skills/${id}${groupQuery(groupId)}`, { method: "PATCH", body: JSON.stringify(body) }),
   addRequirement: (jobId: number, name: string, importance: Importance) =>
     request<JobDetail>(`/jobs/${jobId}/requirements`, { method: "POST", body: JSON.stringify({ name, importance }) }),
@@ -76,6 +82,17 @@ export const api = {
     request<JobDetail>(`/jobs/${jobId}/requirements/${id}`, { method: "PATCH", body: JSON.stringify({ importance }) }),
   removeRequirement: (jobId: number, id: number) =>
     request<JobDetail>(`/jobs/${jobId}/requirements/${id}`, { method: "DELETE" }),
+  listSkills: () => request<SkillRow[]>("/skills"),
+  listSkillGroups: () => request<SkillGroupNode[]>("/skill-groups"),
+  createSkillGroup: (body: { name: string; parent_id: number | null; description?: string }) =>
+    request<SkillGroupNode[]>("/skill-groups", { method: "POST", body: JSON.stringify(body) }),
+  updateSkillGroup: (
+    id: number,
+    body: { name?: string; description?: string; parent_id?: number | null; move?: "up" | "down" },
+  ) => request<SkillGroupNode[]>(`/skill-groups/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteSkillGroup: (id: number) => request<SkillGroupNode[]>(`/skill-groups/${id}`, { method: "DELETE" }),
+  chat: (messages: { role: "user" | "assistant"; content: string }[], provider?: AIProvider) =>
+    request<{ reply: string; used: string }>("/ai/chat", { method: "POST", body: JSON.stringify({ messages, provider }) }),
   extractJob: (jobId: number) => request<JobDetail>(`/jobs/${jobId}/extract`, { method: "POST", body: "{}" }),
 
   getAISettings: () => request<AISettings>("/ai/settings"),

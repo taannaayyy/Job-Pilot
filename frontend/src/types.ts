@@ -128,6 +128,22 @@ export interface Requirement {
   /** "dictionary", "model" or "user" */
   source: string;
   mark: SkillMark | null;
+  min_years: number | null;
+  max_years: number | null;
+  /** Degrees: the accepted fields of study. */
+  detail: string | null;
+}
+
+/** A node of the tree requirements are filed in. */
+export interface SkillGroupNode {
+  id: number;
+  /** Set for groups of the starting tree. */
+  key: string | null;
+  name: string;
+  description: string;
+  parent_id: number | null;
+  position: number;
+  skill_count: number;
 }
 
 export interface RoleGroup {
@@ -140,11 +156,18 @@ export interface SkillRow {
   id: number;
   name: string;
   category: string;
+  group_id: number | null;
+  /** The skill it belongs to: pandas to Python. */
+  parent_id: number | null;
   mark: SkillMark | null;
   plan_note: string;
   jobs: number;
   must: number;
   nice: number;
+  /** Years the targets ask for: "1+", "3–5". */
+  years: string[];
+  /** Degrees: accepted fields of study. */
+  details: string[];
 }
 
 export interface SkillGap {
@@ -156,23 +179,42 @@ export interface SkillGap {
   /** 0..1; null when there is nothing to cover yet. */
   coverage: number | null;
   skills: SkillRow[];
+  groups: SkillGroupNode[];
 }
 
 export interface SkillDetail {
   id: number;
   name: string;
   category: string;
+  group_id: number | null;
+  parent_id: number | null;
+  /** The user placed it; reading postings again won't move it. */
+  group_locked: boolean;
   mark: SkillMark | null;
   plan_note: string;
-  jobs: { job_id: number; title: string; company: string; importance: Importance; evidence: string | null }[];
+  jobs: {
+    job_id: number;
+    title: string;
+    company: string;
+    importance: Importance;
+    evidence: string | null;
+    years: string | null;
+    detail: string | null;
+  }[];
   history: { from_mark: SkillMark | null; to_mark: SkillMark | null; timestamp: string }[];
 }
 
-export type AIProvider = "none" | "ollama" | "openai" | "anthropic";
+export type AIProvider = "none" | "ollama" | "openai" | "anthropic" | "claude_code";
 
 export interface AIProviderSettings {
   base_url?: string;
   model?: string;
+  /** Claude Code's program, when it isn't found by itself. */
+  path?: string;
+  /** Claude Code: how long the model thinks (low, medium, high, xhigh, max). */
+  effort?: string;
+  /** The model, not the dictionary, says whether a skill is a must or a nice to have. */
+  model_decides?: boolean;
   /** Only whether a key is saved; the key itself is never sent to the page. */
   has_key?: boolean;
 }
@@ -182,7 +224,7 @@ export interface AISettings {
   providers: Record<string, AIProviderSettings>;
 }
 
-export type AIProviderInput = { base_url?: string; model?: string; api_key?: string };
+export type AIProviderInput = { base_url?: string; model?: string; api_key?: string; path?: string; effort?: string; model_decides?: boolean };
 
 export interface ExtensionInfo {
   token: string;

@@ -5,8 +5,8 @@ A local, single-user macOS app for tracking job applications and for seeing what
 ## Features
 
 - **Save jobs from LinkedIn.** A Chrome extension adds a **Save to Job Pilot** button to LinkedIn job pages. One click saves the title, company, company logo, location, work mode, job type and description. The same posting is never saved twice, even if you also pasted its link by hand. On a LinkedIn company or university page the same button saves the company to your favorites, with its logo, LinkedIn page, website and type. Whatever you save while Job Pilot is closed waits in the extension and is added the next time you open the app.
-- **Skill Gap.** Make any job a **target** of a role group you name, like "AI Engineer (now)" or "Senior ML Engineer (in 3 years)". Its status doesn't matter, and a job can be kept **only to study the role**, off the job board. Each target's description is read, and the Skill Gap page adds up what the targets require: every skill, tool, concept, degree, language and level of experience, how many targets ask for it, and whether as a must-have or nice-to-have. Mark each one **Have**, **Learning**, **Gap** or **Ignore**, write down your plan for it, and see what share of the requirements you already cover. Every change of a mark is kept, for the progress view that comes next.
-- **Your choice of AI, or none.** Descriptions are read by a built-in skill dictionary, which needs no AI and works instantly, plus the model you choose: a local model through Ollama (free, nothing leaves your Mac), any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Gemini, Mistral, LM Studio...) or Claude with your own key. API keys stay on your Mac in a file only you can read.
+- **Skill Gap.** Make any job a **target** of a role group you name, like "AI Engineer (now)" or "Senior ML Engineer (in 3 years)". Its status doesn't matter, and a job can be kept **only to study the role**, off the job board. Each target's description is read, and the Skill Gap page adds up what the targets require: every skill, tool, concept, degree, language and level of experience, how many targets ask for it, and whether as a must-have or nice-to-have. Mark each one **Have**, **Learning**, **Gap** or **Ignore**, write down your plan for it, and see what share of the requirements you already cover. Requirements are filed in a **skill tree**: Technologies (programming languages, libraries under their language, databases & SQL, cloud & infrastructure, data engineering, MLOps, BI tools), Knowledge areas (machine learning, deep learning, generative AI, data analysis & statistics, software engineering, domain knowledge), Experience, Education (with the accepted fields of study), Spoken languages and Soft skills (hidden by default). Years go on the skill they're about ("Python · 3–5 yrs"). Edit the tree in the app, move any skill, and press **Get recommendation** to discuss the whole tree with the AI you choose. Filter by mark and by group. Every change of a mark is kept, for the progress view that comes next.
+- **Your choice of AI, or none.** Descriptions are read by a built-in skill dictionary, which needs no AI and works instantly, plus the model you choose: a local model through Ollama (free, nothing leaves your Mac), any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Gemini, Mistral, LM Studio...), Claude with your own API key, or **Claude Code**, which uses your Claude subscription with no API key (pick the model and effort from a list; Opus 5.5 at medium effort by default) (it needs Claude Code installed and logged in, runs with no tools or files, and counts toward your plan's usage limits). You choose whether the model or the dictionary decides what's a must and what's a nice to have. API keys stay on your Mac in a file only you can read.
 - **Board and table views.** Use the kanban board with drag and drop, or a sortable table.
 - **Statuses.** A job moves through Saved, Applied, Screening, Interview, Awaiting decision (all interviews done, waiting for their answer), Offer, Rejected and Ghosted.
 - **Automatic applied date.** It is stamped the first time a job moves to Applied or a later stage.
@@ -111,6 +111,19 @@ The installed app uses 8765 and `dev.sh` uses 8766, so both can run at the same 
 cd backend && uv run pytest
 ```
 
+### Tuning how postings are read
+
+To see why each requirement was kept, dropped or changed for a posting, without saving anything:
+
+```bash
+cd backend
+uv run python -m jobpilot.tune 12                  # job 12 from the app's database
+uv run python -m jobpilot.tune posting.txt         # any text file
+uv run python -m jobpilot.tune 12 --model haiku    # another model; --provider none for the dictionary only
+```
+
+The prompt is `PROMPT` and `SYSTEM` in `ai.py`, the dictionary and its section rules are in `skills.py`, and the merge rules are in `extraction.py`. Add each edge case you find to `tests/test_skillgap.py`.
+
 ### Schema changes
 
 Edit `backend/src/jobpilot/models.py`, then generate a migration:
@@ -133,9 +146,11 @@ backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
     api.py               REST endpoints under /api
     capture.py           Endpoints for the Chrome extension
     skillgap.py          Skill Gap endpoints: role groups, the gap list, marks, AI settings
-    skills.py            The skill dictionary: finds known skills and merges their spellings
-    ai.py                The AI providers: Ollama, OpenAI-compatible, Claude
+    skills.py            The skill dictionary: finds known skills, their place in the tree, years and degrees
+    taxonomy.py          The starting skill tree
+    ai.py                The AI providers: Ollama, OpenAI-compatible, Claude API, Claude Code
     extraction.py        Dictionary + model, merged; background worker
+    tune.py              Shows how one posting is read, step by step
     linkedin.py          Reads LinkedIn job IDs, locations, job types and company pages
     logos.py             Fetches and caches company logos
     models.py            Database tables

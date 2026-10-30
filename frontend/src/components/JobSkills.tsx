@@ -67,6 +67,7 @@ export default function JobSkills({ job, groups, onChange, onGroupsChanged, onEr
         onClick={() => run(() => api.setRequirementImportance(job.id, r.id, r.importance === "must" ? "nice" : "must"))}
       >
         {r.name}
+        {r.min_years ? <span className="req-years">{r.min_years}{r.max_years ? `–${r.max_years}` : "+"}y</span> : null}
       </button>
       <button
         type="button"

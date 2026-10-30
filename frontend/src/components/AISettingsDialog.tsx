@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { AIProvider, AIProviderInput, AISettings } from "../types";
 import { useClosing } from "../useClosing";
+import ClaudeModelPicker from "./ClaudeModelPicker";
 import { CheckIcon, RefreshIcon } from "./Icons";
 
 interface Props {
@@ -13,8 +14,16 @@ const CHOICES: { value: AIProvider; title: string; text: string }[] = [
   { value: "none", title: "Dictionary only", text: "No AI. Finds the skills the app knows, instantly. Free." },
   { value: "ollama", title: "Local model (Ollama)", text: "Runs on this Mac. Free, and nothing leaves the computer." },
   { value: "openai", title: "OpenAI-compatible API", text: "OpenAI, OpenRouter, Groq, Gemini, Mistral, LM Studio and others." },
-  { value: "anthropic", title: "Claude", text: "Anthropic's API, with your own key." },
+  { value: "anthropic", title: "Claude API", text: "Anthropic's API, with your own key." },
+  { value: "claude_code", title: "Claude Code", text: "Your Claude subscription, through Claude Code on this Mac. No API key." },
 ];
+
+// Postings are sent to these services; the dialog says so.
+const CLOUD: Partial<Record<AIProvider, string>> = {
+  openai: "the server above",
+  anthropic: "Anthropic",
+  claude_code: "Anthropic, and count toward your Claude plan's usage limits",
+};
 
 // Common servers that speak the OpenAI API; any other address can be typed in.
 const PRESETS = [
@@ -85,12 +94,13 @@ export default function AISettingsDialog({ onClose, onSaved }: Props) {
     setModelsError(null);
     if (!form) return;
     const config = form[provider] ?? {};
-    if (provider === "ollama" || (provider !== "none" && (config.has_key || config.api_key))) loadModels();
+    if (provider === "ollama" || provider === "claude_code" || (provider !== "none" && (config.has_key || config.api_key)))
+      loadModels();
     // Only when the chosen provider changes, not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, !!form]);
 
-  const set = (field: keyof AIProviderInput, value: string) =>
+  const set = <K extends keyof AIProviderInput>(field: K, value: AIProviderInput[K]) =>
     setForm((f) => (f ? { ...f, [provider]: { ...f[provider], [field]: value } } : f));
 
   const config = form?.[provider] ?? {};
@@ -191,6 +201,31 @@ export default function AISettingsDialog({ onClose, onSaved }: Props) {
                     <span className="field-note">Kept on this Mac only, in a file only you can read.</span>
                   </label>
                 )}
+                {provider === "claude_code" ? (
+                  <>
+                  <div className="wide field-group">
+                    <span className="field-label-text">Model</span>
+                    <ClaudeModelPicker
+                      model={config.model ?? ""}
+                      effort={config.effort ?? "medium"}
+                      onChange={(change) => setForm((f) => (f ? { ...f, claude_code: { ...f.claude_code, ...change } } : f))}
+                    />
+                    {modelsError && <span className="field-note err">{modelsError}</span>}
+                  </div>
+                  <label className="wide">
+                    Claude Code program
+                    <input
+                      value={config.path ?? ""}
+                      onChange={(e) => set("path", e.target.value)}
+                      placeholder="Found automatically"
+                    />
+                    <span className="field-note">
+                      Runs with no tools, files or settings: it only reads the posting. Needs Claude Code installed and
+                      logged in.
+                    </span>
+                  </label>
+                  </>
+                ) : (
                 <label className="wide">
                   Model
                   <div className="row">
@@ -216,6 +251,22 @@ export default function AISettingsDialog({ onClose, onSaved }: Props) {
                     <span className="field-note">{models.length} available. Click the field to pick one.</span>
                   ) : null}
                 </label>
+                )}
+                <label className="check wide">
+                  <input
+                    type="checkbox"
+                    checked={!!config.model_decides}
+                    onChange={(e) => set("model_decides", e.target.checked)}
+                  />
+                  <span>
+                    The model decides what's a must and what's a nice to have
+                    <span className="field-note">
+                      {" "}
+                      Otherwise the dictionary's rules do. Strong models read the posting better; small local ones often don't.
+                    </span>
+                  </span>
+                </label>
+                {CLOUD[provider] && <p className="field-note wide">Job descriptions are sent to {CLOUD[provider]}.</p>}
               </div>
             )}
 

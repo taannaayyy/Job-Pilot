@@ -52,6 +52,8 @@ const VIEW_KEY = "jobpilot.ui.view";
 const PAGE_KEY = "jobpilot.ui.page";
 const COMPANY_GROUP_KEY = "jobpilot.ui.companyGroup";
 const ROLE_GROUP_KEY = "jobpilot.ui.roleGroup";
+// Renamed from "jobpilot.ui.gapHidden", which held the flat kinds before the tree.
+const GAP_VIEW_KEY = "jobpilot.ui.gapView";
 
 function load<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -68,6 +70,17 @@ function loadGroupId(): number | null {
     return Number.isInteger(id) ? id : null;
   } catch {
     return null;
+  }
+}
+
+/** What Skill Gap shows (marks, tree groups, collapsed groups), remembered between launches. */
+function loadGapView(): Pick<GapFilters, "hiddenMarks" | "hiddenTree" | "collapsed"> {
+  try {
+    const v = JSON.parse(localStorage.getItem(GAP_VIEW_KEY) || "{}");
+    const list = (x: unknown) => (Array.isArray(x) ? x.filter((i): i is string => typeof i === "string") : []);
+    return { hiddenMarks: list(v.hiddenMarks), hiddenTree: Array.isArray(v.hiddenTree) ? list(v.hiddenTree) : null, collapsed: list(v.collapsed) };
+  } catch {
+    return { hiddenMarks: [], hiddenTree: null, collapsed: [] };
   }
 }
 
@@ -98,9 +111,22 @@ export default function App() {
   };
   const [groups, setGroups] = useState<RoleGroup[]>([]);
   // The role group shown on Skill Gap is remembered between launches, like All or Favorites.
-  const [gapFilters, setGapFiltersState] = useState<GapFilters>(() => ({ ...DEFAULT_GAP_FILTERS, groupId: loadGroupId() }));
+  const [gapFilters, setGapFiltersState] = useState<GapFilters>(() => ({
+    ...DEFAULT_GAP_FILTERS,
+    ...loadGapView(),
+    groupId: loadGroupId(),
+  }));
   const setGapFilters = (filters: GapFilters) => {
     if (filters.groupId !== gapFilters.groupId) save(ROLE_GROUP_KEY, filters.groupId === null ? "" : String(filters.groupId));
+    if (
+      filters.hiddenMarks !== gapFilters.hiddenMarks ||
+      filters.hiddenTree !== gapFilters.hiddenTree ||
+      filters.collapsed !== gapFilters.collapsed
+    )
+      save(
+        GAP_VIEW_KEY,
+        JSON.stringify({ hiddenMarks: filters.hiddenMarks, hiddenTree: filters.hiddenTree, collapsed: filters.collapsed }),
+      );
     setGapFiltersState(filters);
   };
   // Bumped when a job changes, so Skill Gap reloads its list.

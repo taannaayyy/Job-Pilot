@@ -1,10 +1,13 @@
 import json
+import os
 import stat
+import subprocess
 
 import anthropic
 import httpx2
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from jobpilot import ai, extraction, skills
 from jobpilot.main import create_app
@@ -41,7 +44,10 @@ def test_dictionary_reads_sections_and_clauses():
     assert found["Docker"] == found["Kubernetes"] == found["AWS"] == found["RAG"] == Importance.MUST
     assert found["Bachelor's degree"] == Importance.MUST and found["Master's degree"] == Importance.NICE
     assert found["English"] == Importance.MUST and found["Turkish"] == Importance.NICE
-    assert found["2+ years of experience"] == Importance.MUST
+    by_name = {f.name: f for f in skills.find(POSTING)}
+    # "2+ years of experience building machine learning systems": the years are about machine learning.
+    assert (by_name["Machine learning"].min_years, by_name["Machine learning"].max_years) == (2, None)
+    assert "Professional experience" not in found
     assert found["LangChain"] == Importance.NICE
     assert "Mentoring" not in found  # from the company's offer, not a requirement
 
@@ -83,7 +89,8 @@ class FakeModel(ai.Provider):
         super().__init__({"model": "fake"})
         self.items, self.error = items or [], error
 
-    def extract(self, text):
+    def extract(self, text, tree=None):
+        self.tree = tree
         if self.error:
             raise ai.AIError(self.error)
         return self.items
@@ -136,10 +143,11 @@ def test_tasks_are_not_skills():
     ])
     found = {i.name: i for i in extraction.extract(DUTIES, model).items}
     for task in ["Business translation", "Monitoring", "Report preparation", "Model documentation", "Docker",
-                 "Cloud environments", "Data visualization tools", "Stakeholder management", "Teamwork",
-                 "Data structures and algorithms"]:
+                 "Data visualization tools", "Stakeholder management", "Teamwork", "Data structures and algorithms"]:
         assert task not in found, task
-    assert {"Data preprocessing", "Model training", "Exploratory Data Analysis", "Pharmaceutical industry"} <= set(found)
+    # A category with its examples counts, and so does each example.
+    assert {"Data preprocessing", "Model training", "Exploratory Data Analysis", "Pharmaceutical industry",
+            "Cloud environments"} <= set(found)
     assert {"Feature engineering", "Model evaluation", "AWS", "Azure", "Google Cloud", "Tableau"} <= set(found)
 
 
@@ -293,7 +301,7 @@ def test_api_keys_are_never_sent_back(client, tmp_path):
     res = client.put("/api/ai/settings", json={"provider": "anthropic", "providers": {"anthropic": {"api_key": "sk-secret", "model": "claude-haiku-5-5"}}})
     body = res.json()
     assert "sk-secret" not in res.text
-    assert body["providers"]["anthropic"] == {"model": "claude-haiku-5-5", "has_key": True}
+    assert body["providers"]["anthropic"] == {"model": "claude-haiku-5-5", "has_key": True, "model_decides": True}
     path = tmp_path / "ai-settings.json"
     assert json.loads(path.read_text())["providers"]["anthropic"]["api_key"] == "sk-secret"
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
@@ -406,3 +414,322 @@ def test_claude_wrong_key(monkeypatch):
 def test_claude_needs_a_key():
     with pytest.raises(ai.AIError, match="Paste your Claude API key"):
         ai.Claude({"model": "claude-haiku-5-5", "api_key": ""}).extract("text")
+
+
+# ---- Who decides must or nice
+
+
+SECTIONS = """Requirements
+- Python
+- SQL
+The key duties are;
+- Build models
+- Experience with Kubernetes
+"""
+
+
+class DecidingModel(FakeModel):
+    def __init__(self, decides):
+        super().__init__([
+            ai.ModelItem("Python", "language", Importance.MUST, "Python"),
+            ai.ModelItem("Experience with Kubernetes", "tool", Importance.NICE, "Kubernetes"),
+        ])
+        self.config = {"model": "fake", "model_decides": decides}
+
+
+def test_a_strong_model_decides_must_or_nice():
+    found = {i.name: i.importance for i in extraction.extract(SECTIONS, DecidingModel(True)).items}
+    assert found["Kubernetes"] == Importance.NICE  # the model read it as a plus
+    assert found["Python"] == found["SQL"] == Importance.MUST
+
+
+def test_otherwise_the_dictionary_decides():
+    found = {i.name: i.importance for i in extraction.extract(SECTIONS, DecidingModel(False)).items}
+    assert found["Kubernetes"] == Importance.MUST
+
+
+def test_the_degree_rule_holds_even_when_the_model_decides():
+    model = FakeModel([ai.ModelItem("BSc or MSc degree", "education", Importance.MUST, "BSc or MSc")])
+    model.config = {"model": "fake", "model_decides": True}
+    found = {i.name: i.importance for i in extraction.extract("Requirements\nBSc or MSc degree", model).items}
+    assert (found["Bachelor's degree"], found["Master's degree"]) == (Importance.MUST, Importance.NICE)
+
+
+def test_model_decides_is_saved_per_provider(client):
+    client.put("/api/ai/settings", json={"provider": "ollama", "providers": {"ollama": {"model_decides": True}}})
+    settings = client.get("/api/ai/settings").json()["providers"]
+    assert settings["ollama"]["model_decides"] is True and settings["claude_code"]["model_decides"] is True
+
+
+# ---- Claude Code
+
+
+def _fake_cli(monkeypatch, stdout="", stderr="", code=0, error=None):
+    calls = []
+
+    def run(cmd, prompt, cwd, env):
+        calls.append({"cmd": cmd, "prompt": prompt, "cwd": cwd, "env": env})
+        if error:
+            raise error
+        return subprocess.CompletedProcess(cmd, code, stdout, stderr)
+
+    monkeypatch.setattr(ai, "_run_cli", run)
+    return calls
+
+
+@pytest.fixture
+def claude_bin(tmp_path):
+    path = tmp_path / "claude"
+    path.write_text("#!/bin/sh\n")
+    path.chmod(0o755)
+    return str(path)
+
+
+def test_claude_code_reads_structured_output(monkeypatch, claude_bin):
+    calls = _fake_cli(monkeypatch, json.dumps({"type": "result", "is_error": False, "result": "", "structured_output": ANSWER}))
+    items = ai.ClaudeCode({"path": claude_bin, "model": "sonnet"}).extract("posting text")
+    assert [i.name for i in items] == ["PyTorch"]
+    cmd = calls[0]["cmd"]
+    # It can only read what it's given: no tools, no MCP servers, no settings, no saved sessions.
+    assert cmd[cmd.index("--tools") + 1] == ""
+    assert cmd[cmd.index("--setting-sources") + 1] == ""
+    assert {"-p", "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands"} <= set(cmd)
+    assert cmd[cmd.index("--model") + 1] == "sonnet"
+    assert json.loads(cmd[cmd.index("--json-schema") + 1]) == ai.SCHEMA
+    assert calls[0]["prompt"].endswith("posting text")
+    # Run in an empty folder of its own, not the app's or a project's.
+    assert "jobpilot-" in calls[0]["cwd"] and not os.path.exists(calls[0]["cwd"])
+
+
+def test_claude_code_without_a_model_uses_its_own_default(monkeypatch, claude_bin):
+    calls = _fake_cli(monkeypatch, json.dumps({"is_error": False, "result": json.dumps(ANSWER)}))
+    items = ai.ClaudeCode({"path": claude_bin, "model": ""}).extract("text")
+    assert "--model" not in calls[0]["cmd"]
+    assert [i.name for i in items] == ["PyTorch"]  # read from "result" when there's no structured_output
+
+
+@pytest.mark.parametrize(
+    "result, expected",
+    [
+        ("Not logged in · Please run /login", "isn't logged in"),
+        ("Claude AI usage limit reached|1761868800", "usage limit"),
+        ("There's an issue with the selected model (x).", "selected model"),
+    ],
+)
+def test_claude_code_errors(monkeypatch, claude_bin, result, expected):
+    _fake_cli(monkeypatch, json.dumps({"is_error": True, "result": result}), code=1)
+    with pytest.raises(ai.AIError, match=expected):
+        ai.ClaudeCode({"path": claude_bin}).extract("text")
+
+
+def test_claude_code_crash_and_timeout(monkeypatch, claude_bin):
+    _fake_cli(monkeypatch, stdout="", stderr="segfault", code=139)
+    with pytest.raises(ai.AIError, match="segfault"):
+        ai.ClaudeCode({"path": claude_bin}).extract("text")
+    _fake_cli(monkeypatch, error=subprocess.TimeoutExpired("claude", 1))
+    with pytest.raises(ai.AIError, match="too long"):
+        ai.ClaudeCode({"path": claude_bin}).extract("text")
+
+
+def test_claude_code_not_installed(monkeypatch, tmp_path):
+    monkeypatch.setattr(ai.shutil, "which", lambda _: None)
+    monkeypatch.setattr(ai, "_CLAUDE_PLACES", (str(tmp_path / "nope"),))
+    with pytest.raises(ai.AIError, match="isn't installed"):
+        ai.ClaudeCode({}).models()
+    with pytest.raises(ai.AIError, match="no Claude Code at"):
+        ai.ClaudeCode({"path": str(tmp_path / "missing")}).extract("text")
+
+
+def test_claude_code_is_found_outside_path(monkeypatch, claude_bin):
+    monkeypatch.setattr(ai.shutil, "which", lambda _: None)  # an app opened from Finder has a short PATH
+    monkeypatch.setattr(ai, "_CLAUDE_PLACES", (claude_bin,))
+    assert ai.ClaudeCode({}).binary() == claude_bin
+
+
+def test_claude_code_settings_round_trip(client):
+    body = client.put("/api/ai/settings", json={
+        "provider": "claude_code", "providers": {"claude_code": {"path": "~/bin/claude", "model": "sonnet"}},
+    }).json()
+    assert body["provider"] == "claude_code"
+    assert body["providers"]["claude_code"] == {
+        "path": "~/bin/claude", "model": "sonnet", "effort": "medium", "model_decides": True,
+    }
+    assert client.put("/api/ai/settings", json={
+        "provider": "claude_code", "providers": {"claude_code": {"effort": "extreme"}},
+    }).status_code == 422
+
+
+def test_claude_code_defaults_to_opus_at_medium_effort(monkeypatch, tmp_path, claude_bin):
+    monkeypatch.setattr(ai.shutil, "which", lambda _: claude_bin)
+    calls = _fake_cli(monkeypatch, json.dumps({"is_error": False, "structured_output": ANSWER}))
+    ai.Settings(tmp_path / "s.json").provider().extract("text")
+    cmd = calls[0]["cmd"]
+    assert (cmd[cmd.index("--model") + 1], cmd[cmd.index("--effort") + 1]) == ("claude-opus-5-5", "medium")
+    assert ai.Settings(tmp_path / "s.json").provider().describe() == "Claude Code Opus 5.5, medium effort"
+
+
+def test_claude_code_effort_is_passed_on(monkeypatch, claude_bin):
+    calls = _fake_cli(monkeypatch, json.dumps({"is_error": False, "structured_output": ANSWER}))
+    ai.ClaudeCode({"path": claude_bin, "model": "claude-haiku-5-5", "effort": "max"}).extract("text")
+    assert calls[0]["cmd"][calls[0]["cmd"].index("--effort") + 1] == "max"
+    ai.ClaudeCode({"path": claude_bin, "model": "", "effort": ""}).extract("text")  # Claude Code's own defaults
+    assert "--effort" not in calls[1]["cmd"] and "--model" not in calls[1]["cmd"]
+
+
+def test_default_is_claude_code_when_installed(monkeypatch, tmp_path, claude_bin):
+    monkeypatch.setattr(ai.shutil, "which", lambda _: claude_bin)
+    assert ai.Settings(tmp_path / "a.json").load()["provider"] == "claude_code"
+    monkeypatch.setattr(ai.shutil, "which", lambda _: None)
+    monkeypatch.setattr(ai, "_CLAUDE_PLACES", ())
+    assert ai.Settings(tmp_path / "b.json").load()["provider"] == "ollama"
+
+
+# ---- The tree
+
+
+def test_years_go_on_the_skill_they_are_about():
+    found = {f.name: f for f in skills.find("Requirements\n- 3-5 years of Python and SQL\n- 5+ years of professional experience")}
+    assert (found["Python"].min_years, found["Python"].max_years) == (3, 5)
+    assert (found["SQL"].min_years, found["SQL"].max_years) == (3, 5)
+    assert (found["Professional experience"].min_years, found["Professional experience"].group) == (5, "experience")
+
+
+def test_degrees_carry_their_fields_and_libraries_their_language():
+    found = {f.name: f for f in skills.find(
+        "Requirements\nBSc in a quantitative field such as Computer Engineering, Mathematics, or related disciplines\npandas, PyTorch")}
+    assert found["Bachelor's degree"].detail == "Computer Engineering, Mathematics"
+    assert found["pandas"].parent == found["PyTorch"].parent == "Python"
+    assert (found["pandas"].group, found["SQL"].group if "SQL" in found else "tech.databases") == ("tech.libraries", "tech.databases")
+
+
+def test_the_model_files_in_the_users_tree_and_reports_years():
+    tree = extraction.Tree.default()
+    model = FakeModel([
+        ai.ModelItem("Model training", "Knowledge areas › Machine learning", Importance.MUST, "model training"),
+        ai.ModelItem("Professional experience", "Experience", Importance.MUST, "3+ years", min_years=3),
+        ai.ModelItem("Python", "Technologies › Programming languages", Importance.MUST, "", min_years=2, max_years=4),
+        ai.ModelItem("Quantitative field degree", "Education", Importance.MUST, "quantitative field"),
+        ai.ModelItem("Feast", "Technologies › MLOps & dev tools", Importance.NICE, "Feast", parent="Made-up parent"),
+    ])
+    text = "Requirements\n- 3+ years in industry\n- Python\n- Model training\n- A quantitative field degree\n- Feast"
+    found = {i.name: i for i in extraction.extract(text, model, tree=tree).items}
+    assert model.tree == tree.groups  # the model saw the tree
+    assert found["Model training"].group_path == "Knowledge areas › Machine learning"
+    assert (found["Professional experience"].min_years, found["Professional experience"].group_key) == (3, "experience")
+    assert (found["Python"].min_years, found["Python"].max_years) == (2, 4)  # years from the model on a dictionary skill
+    assert "Quantitative field degree" not in found  # degrees come from the dictionary
+    assert found["Feast"].parent == "Made-up parent"
+
+
+def test_the_prompt_lists_the_tree():
+    text = ai.prompt(ai.default_tree())
+    assert "- Technologies › Cloud & infrastructure: AWS" in text and "- Soft skills:" in text
+    assert ai.schema(ai.default_tree())["properties"]["requirements"]["items"]["properties"]["group"]["enum"][0] == (
+        "Technologies › Programming languages"
+    )
+
+
+def _groups(client):
+    return {g["name"]: g for g in client.get("/api/skill-groups").json()}
+
+
+def test_extracted_skills_are_filed_with_their_parents(client):
+    target(client, text="Requirements\n- pandas and SQL\n- 3+ years of AWS")
+    groups = {g["id"]: g["name"] for g in client.get("/api/skill-groups").json()}
+    gap = client.get("/api/skill-gap").json()
+    rows = {s["name"]: s for s in gap["skills"]}
+    assert groups[rows["pandas"]["group_id"]] == "Libraries & frameworks"
+    assert groups[rows["SQL"]["group_id"]] == "Databases & SQL"
+    assert rows["AWS"]["years"] == ["3+"]
+    python = next(s for s in client.get("/api/skills").json() if s["name"] == "Python")
+    assert rows["pandas"]["parent_id"] == python["id"]
+    assert {g["name"] for g in gap["groups"]} >= {"Technologies", "Soft skills"}
+
+
+def test_editing_the_tree(client):
+    tech = _groups(client)["Technologies"]
+    groups = client.post("/api/skill-groups", json={"name": "Vector search", "parent_id": tech["id"]}).json()
+    new = next(g for g in groups if g["name"] == "Vector search")
+    assert new["position"] == 7  # after the seven starting subgroups
+    client.patch(f"/api/skill-groups/{new['id']}", json={"move": "up"})
+    assert _groups(client)["Vector search"]["position"] == 6
+    client.patch(f"/api/skill-groups/{new['id']}", json={"name": "Search", "description": "Elasticsearch, vector search"})
+    assert _groups(client)["Search"]["description"] == "Elasticsearch, vector search"
+    # Not inside itself or its own subgroups.
+    assert client.patch(f"/api/skill-groups/{tech['id']}", json={"parent_id": new["id"]}).status_code == 422
+
+
+def test_deleting_a_group_moves_its_skills_and_subgroups_up(client):
+    target(client, text="Requirements\n- Docker")
+    groups = _groups(client)
+    cloud, tech = groups["Cloud & infrastructure"], groups["Technologies"]
+    client.post("/api/skill-groups", json={"name": "Containers", "parent_id": cloud["id"]})
+    client.delete(f"/api/skill-groups/{cloud['id']}")
+    groups = _groups(client)
+    assert "Cloud & infrastructure" not in groups and groups["Containers"]["parent_id"] == tech["id"]
+    docker = next(s for s in client.get("/api/skill-gap").json()["skills"] if s["name"] == "Docker")
+    assert docker["group_id"] == tech["id"]
+
+
+def test_a_skill_the_user_moves_stays_there(client):
+    job, _ = target(client, text="Requirements\n- Docker")
+    soft = _groups(client)["Soft skills"]
+    docker = next(s for s in client.get("/api/skill-gap").json()["skills"] if s["name"] == "Docker")
+    detail = client.patch(f"/api/skills/{docker['id']}", json={"group_id": soft["id"]}).json()
+    assert detail["group_locked"] is True
+    client.post(f"/api/jobs/{job['id']}/extract")
+    docker = next(s for s in client.get("/api/skill-gap").json()["skills"] if s["name"] == "Docker")
+    assert docker["group_id"] == soft["id"]
+
+
+def test_a_skill_cant_be_under_its_own_child(client):
+    target(client, text="Requirements\n- pandas")
+    by_name = {s["name"]: s for s in client.get("/api/skills").json()}
+    pandas, python = by_name["pandas"], by_name["Python"]
+    assert pandas["parent_id"] == python["id"]
+    assert client.patch(f"/api/skills/{python['id']}", json={"parent_id": pandas["id"]}).status_code == 422
+
+
+def test_old_skills_are_filed_on_upgrade(tmp_path):
+    from jobpilot.models import Skill
+
+    app = create_app(tmp_path / "t.db", inline_extraction=True)
+    with app.state.sessionmaker() as session:
+        session.add_all([Skill(name="pandas", key="pandas", category="framework"),
+                         Skill(name="Ranking", key="ranking", category="concept")])
+        session.commit()
+        extraction.refile(session, extraction.Tree.load(session))
+        session.commit()
+        tree = extraction.Tree.load(session)
+        pandas = session.scalar(select(Skill).where(Skill.key == "pandas"))
+        ranking = session.scalar(select(Skill).where(Skill.key == "ranking"))
+        assert pandas.group_id == tree.id_of_key["tech.libraries"] and pandas.parent.name == "Python"
+        assert ranking.group_id is None  # its old kind was the model's guess; the next reading files it
+
+
+class ChattyModel(ai.Provider):
+    name = "ollama"
+
+    def chat(self, system, messages):
+        self.seen = (system, messages)
+        return "Move Docker to Cloud & infrastructure."
+
+
+def test_recommendation_chat_sends_the_whole_tree(client, monkeypatch):
+    target(client, text="Requirements\n- pandas\n- Docker")
+    model = ChattyModel({})
+    monkeypatch.setattr(ai.Settings, "provider", lambda self, name=None, overrides=None: model)
+    res = client.post("/api/ai/chat", json={"messages": [{"role": "user", "content": "Recommend changes"}]})
+    assert res.json() == {"reply": "Move Docker to Cloud & infrastructure.", "used": "Ollama"}
+    system, messages = model.seen
+    assert "[Technologies]" in system and "[Soft skills]" in system
+    assert "- Python (in 0 jobs)" not in system  # only skills jobs ask for
+    # pandas once, in its own group, pointing at Python, not again under Python.
+    assert system.count("- pandas") == 1 and "- pandas (in 1 job, belongs to Python)" in system
+    assert "- Docker (in 1 job)" in system
+    assert messages == [{"role": "user", "content": "Recommend changes"}]
+
+
+def test_the_dictionary_cant_chat(client):
+    res = client.post("/api/ai/chat", json={"provider": "none", "messages": [{"role": "user", "content": "hi"}]})
+    assert res.status_code == 422
