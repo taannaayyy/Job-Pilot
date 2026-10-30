@@ -12,7 +12,6 @@ import type {
   Openings,
   RoleGroup,
   SkillDetail,
-  SkillGroupNode,
   SkillRow,
   SkillGap,
   SkillMark,
@@ -77,8 +76,11 @@ export const api = {
       description?: string;
       mark?: SkillMark | null;
       plan_note?: string;
-      group_id?: number | null;
+      /** Moving it: under parent_id (null: the top level), at index among its new siblings. */
       parent_id?: number | null;
+      index?: number;
+      /** false: out of the tree, to Unsorted. */
+      placed?: boolean;
     },
     groupId: number | null,
   ) =>
@@ -90,17 +92,9 @@ export const api = {
   removeRequirement: (jobId: number, id: number) =>
     request<JobDetail>(`/jobs/${jobId}/requirements/${id}`, { method: "DELETE" }),
   listSkills: () => request<SkillRow[]>("/skills"),
-  createSkill: (body: { name: string; group_id: number | null; parent_id?: number | null }) =>
+  createSkill: (body: { name: string; parent_id: number | null; index?: number; is_group?: boolean; description?: string }) =>
     request<SkillRow[]>("/skills", { method: "POST", body: JSON.stringify(body) }),
   deleteSkill: (id: number) => request<SkillRow[]>(`/skills/${id}`, { method: "DELETE" }),
-  listSkillGroups: () => request<SkillGroupNode[]>("/skill-groups"),
-  createSkillGroup: (body: { name: string; parent_id: number | null; description?: string }) =>
-    request<SkillGroupNode[]>("/skill-groups", { method: "POST", body: JSON.stringify(body) }),
-  updateSkillGroup: (
-    id: number,
-    body: { name?: string; description?: string; parent_id?: number | null; index?: number },
-  ) => request<SkillGroupNode[]>(`/skill-groups/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deleteSkillGroup: (id: number) => request<SkillGroupNode[]>(`/skill-groups/${id}`, { method: "DELETE" }),
   chat: (messages: { role: "user" | "assistant"; content: string }[], provider?: AIProvider) =>
     request<{ reply: string; used: string }>("/ai/chat", { method: "POST", body: JSON.stringify({ messages, provider }) }),
   extractJob: (jobId: number) => request<JobDetail>(`/jobs/${jobId}/extract`, { method: "POST", body: "{}" }),

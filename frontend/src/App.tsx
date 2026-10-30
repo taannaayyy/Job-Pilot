@@ -6,7 +6,7 @@ import JobPanel from "./components/JobPanel";
 import JobTable from "./components/JobTable";
 import ExtensionDialog from "./components/ExtensionDialog";
 import AISettingsDialog from "./components/AISettingsDialog";
-import SkillGap, { DEFAULT_GAP_FILTERS, type GapFilters } from "./components/SkillGap";
+import SkillGap, { DEFAULT_GAP_FILTERS, GAP_VIEWS, type GapFilters } from "./components/SkillGap";
 import {
   AutoIcon,
   BoardIcon,
@@ -73,14 +73,27 @@ function loadGroupId(): number | null {
   }
 }
 
-/** What Skill Gap shows (marks, tree groups, collapsed groups), remembered between launches. */
-function loadGapView(): Pick<GapFilters, "hiddenMarks" | "hiddenTree" | "collapsed"> {
+type GapLook = Pick<GapFilters, "view" | "sort" | "hiddenTree" | "onlyAsked" | "zoom" | "collapsed">;
+// 2: the default view became the diagram. 3: the tree became skills only, so hidden and collapsed
+// nodes saved before (group ids) mean nothing now.
+const GAP_LOOK_VERSION = 3;
+
+/** How Skill Gap shows the tree (view, order, hidden groups, collapsed rows), remembered between launches. */
+function loadGapView(): GapLook {
   try {
     const v = JSON.parse(localStorage.getItem(GAP_VIEW_KEY) || "{}");
     const list = (x: unknown) => (Array.isArray(x) ? x.filter((i): i is string => typeof i === "string") : []);
-    return { hiddenMarks: list(v.hiddenMarks), hiddenTree: Array.isArray(v.hiddenTree) ? list(v.hiddenTree) : null, collapsed: list(v.collapsed) };
+    const current = v.v === GAP_LOOK_VERSION;
+    return {
+      view: (v.v ?? 0) >= 2 && GAP_VIEWS.includes(v.view) ? v.view : DEFAULT_GAP_FILTERS.view,
+      sort: ["tree", "count", "name"].includes(v.sort) && current ? v.sort : DEFAULT_GAP_FILTERS.sort,
+      hiddenTree: current && Array.isArray(v.hiddenTree) ? list(v.hiddenTree) : null,
+      onlyAsked: v.onlyAsked === true,
+      zoom: typeof v.zoom === "number" && v.zoom >= 0.3 && v.zoom <= 2 ? v.zoom : 1,
+      collapsed: current ? list(v.collapsed).filter((c) => /^s\d+$|^unsorted$/.test(c)) : [],
+    };
   } catch {
-    return { hiddenMarks: [], hiddenTree: null, collapsed: [] };
+    return { view: DEFAULT_GAP_FILTERS.view, sort: DEFAULT_GAP_FILTERS.sort, hiddenTree: null, onlyAsked: false, zoom: 1, collapsed: [] };
   }
 }
 
@@ -119,14 +132,23 @@ export default function App() {
   const setGapFilters = (filters: GapFilters) => {
     if (filters.groupId !== gapFilters.groupId) save(ROLE_GROUP_KEY, filters.groupId === null ? "" : String(filters.groupId));
     if (
-      filters.hiddenMarks !== gapFilters.hiddenMarks ||
+      filters.view !== gapFilters.view ||
+      filters.sort !== gapFilters.sort ||
       filters.hiddenTree !== gapFilters.hiddenTree ||
+      filters.onlyAsked !== gapFilters.onlyAsked ||
+      filters.zoom !== gapFilters.zoom ||
       filters.collapsed !== gapFilters.collapsed
-    )
-      save(
-        GAP_VIEW_KEY,
-        JSON.stringify({ hiddenMarks: filters.hiddenMarks, hiddenTree: filters.hiddenTree, collapsed: filters.collapsed }),
-      );
+    ) {
+      const look: GapLook = {
+        view: filters.view,
+        sort: filters.sort,
+        hiddenTree: filters.hiddenTree,
+        onlyAsked: filters.onlyAsked,
+        zoom: filters.zoom,
+        collapsed: filters.collapsed,
+      };
+      save(GAP_VIEW_KEY, JSON.stringify({ ...look, v: GAP_LOOK_VERSION }));
+    }
     setGapFiltersState(filters);
   };
   // Bumped when a job changes, so Skill Gap reloads its list.

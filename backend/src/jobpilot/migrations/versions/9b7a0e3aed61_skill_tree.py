@@ -7,8 +7,6 @@ Create Date: 2026-10-30 02:13:27.539534
 from alembic import op
 import sqlalchemy as sa
 
-from jobpilot.taxonomy import flatten
-
 
 revision = '9b7a0e3aed61'
 down_revision = '5d0da09ff390'
@@ -44,16 +42,7 @@ def upgrade() -> None:
         batch_op.create_foreign_key('fk_skill_parent_id', 'skill', ['parent_id'], ['id'], ondelete='SET NULL')
         batch_op.create_foreign_key('fk_skill_group_id', 'skill_group', ['group_id'], ['id'], ondelete='SET NULL')
 
-    # The starting tree; the app files existing skills into it when it starts.
-    conn = op.get_bind()
-    ids = {}
-    for key, name, description, parent, position in flatten():
-        conn.execute(
-            sa.text("INSERT INTO skill_group (key, name, description, parent_id, position) VALUES (:k, :n, :d, :p, :pos)"),
-            {"k": key, "n": name, "d": description, "p": ids.get(parent), "pos": position},
-        )
-        ids[key] = conn.execute(sa.text("SELECT id FROM skill_group WHERE key = :k"), {"k": key}).scalar_one()
-
+    # The starting groups were seeded here; the tree is now made of skills (b5e9d2c4a7f1).
 
 
 def downgrade() -> None:

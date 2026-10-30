@@ -1,39 +1,49 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { children, descendants, flat } from "../tree";
-import type { RoleGroup, SkillGap as Gap, SkillGroupNode, SkillMark, SkillRow } from "../types";
-import { ChevronIcon, PlusIcon, RefreshIcon, SearchIcon, SparkIcon, TargetIcon, TreeIcon } from "./Icons";
-import MarkPicker from "./MarkPicker";
+import { buildMap, findNode, UNSORTED, type MapNode, type MapSort } from "../skillmap";
+import { children, descendants, flat, moved } from "../tree";
+import type { RoleGroup, SkillGap as Gap } from "../types";
+import { PlusIcon, RefreshIcon, SearchIcon, SparkIcon } from "./Icons";
 import MultiFilter from "./MultiFilter";
+import NodeDialog, { type NodeFields } from "./NodeDialog";
 import Segmented from "./Segmented";
-import SkillPanel from "./SkillPanel";
-import TreeDialog from "./TreeDialog";
+import SkillChat from "./SkillChat";
+import { ColumnsView, DiagramView, MapDetails, OutlineView, useTreeDrag, type TreeEdit } from "./SkillMapViews";
 
-// "none": no mark yet.
-const MARK_OPTIONS: { value: SkillMark | "none"; label: string }[] = [
-  { value: "none", label: "No mark yet" },
-  { value: "gap", label: "Gap" },
-  { value: "learning", label: "Learning" },
-  { value: "have", label: "Have" },
-  { value: "ignore", label: "Ignore" },
-];
+export type GapView = "outline" | "columns" | "diagram";
+export const GAP_VIEWS: readonly GapView[] = ["outline", "columns", "diagram"];
 
 // Kept by the app, so they survive switching pages.
 export interface GapFilters {
   groupId: number | null;
   query: string;
-  /** Marks not shown; the user can turn off any number of them. */
-  hiddenMarks: string[];
-  /** Tree groups not shown (ids, "unsorted"); null until the user changes it: Soft skills are hidden. */
+  view: GapView;
+  sort: MapSort;
+  /** Tree nodes not shown ("s12", "unsorted"); null until the user changes it: Soft skills are hidden. */
   hiddenTree: string[] | null;
-  /** Collapsed tree groups. */
+  /** Leaves out what no posting asks for (the whole tree is shown otherwise, to edit it). */
+  onlyAsked: boolean;
+  /** The diagram's zoom, 1 = 100%. */
+  zoom: number;
+  /** Collapsed rows of the outline ("s12", "unsorted"). */
   collapsed: string[];
+  /** The skill shown in the details ("s12", "unsorted"). */
+  selected: string | null;
 }
 
-export const DEFAULT_GAP_FILTERS: GapFilters = { groupId: null, query: "", hiddenMarks: [], hiddenTree: null, collapsed: [] };
-// Groups of the starting tree hidden until the user shows them (taxonomy.HIDDEN_BY_DEFAULT).
-const HIDDEN_BY_DEFAULT = ["soft"];
-const UNSORTED = "unsorted";
+export const DEFAULT_GAP_FILTERS: GapFilters = {
+  groupId: null,
+  query: "",
+  view: "diagram",
+  sort: "tree",
+  hiddenTree: null,
+  onlyAsked: false,
+  zoom: 1,
+  collapsed: [],
+  selected: null,
+};
+// Top-level nodes hidden until the user shows them: they rarely tell you what to learn next.
+const HIDDEN_BY_DEFAULT = ["Soft skills"];
 
 interface Props {
   groups: RoleGroup[];
@@ -46,24 +56,28 @@ interface Props {
   refreshKey: number;
 }
 
-const isOpen = (s: SkillRow) => s.mark === null || s.mark === "gap" || s.mark === "learning";
-
 export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersChange, onOpenJob, onOpenAI, refreshKey }: Props) {
-  const { groupId, query, hiddenMarks, collapsed } = filters;
+  const { groupId, query, view, sort, collapsed, selected: selectedKey } = filters;
   const set = (patch: Partial<GapFilters>) => onFiltersChange({ ...filters, ...patch });
   const [gap, setGap] = useState<Gap | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [openSkill, setOpenSkill] = useState<number | null>(null);
   // null: not editing; "" or a name: the new-group / rename field is open.
   const [naming, setNaming] = useState<{ id: number | null; name: string } | null>(null);
-  const [treeOpen, setTreeOpen] = useState(false);
-  const tree: SkillGroupNode[] = gap?.groups ?? [];
+  const [chatOpen, setChatOpen] = useState(false);
+  const layout = useRef<HTMLDivElement>(null);
+  // The pop-up that adds under a node (parent; null: the top level) or edits one.
+  const [dialog, setDialog] = useState<{ add: MapNode | null } | { edit: MapNode } | null>(null);
+  const nodes = useMemo(() => gap?.skills ?? [], [gap]);
 
-  // A hidden group hides everything under it.
+  // A hidden node hides everything under it.
   const hiddenTree = useMemo(() => {
-    const chosen = filters.hiddenTree ?? tree.filter((g) => g.key && HIDDEN_BY_DEFAULT.includes(g.key)).map((g) => String(g.id));
-    return new Set(chosen.flatMap((id) => (id === UNSORTED ? [UNSORTED] : descendants(tree, Number(id)).map(String))));
-  }, [filters.hiddenTree, tree]);
+    const chosen =
+      filters.hiddenTree ??
+      nodes.filter((n) => n.placed && n.parent_id === null && HIDDEN_BY_DEFAULT.includes(n.name)).map((n) => `s${n.id}`);
+    return new Set(
+      chosen.flatMap((key) => (key === UNSORTED ? [UNSORTED] : descendants(nodes, Number(key.slice(1))).map((id) => `s${id}`))),
+    );
+  }, [filters.hiddenTree, nodes]);
 
   const load = useCallback(
     () =>
@@ -94,45 +108,96 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, groupId]);
 
-  const rows = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase("tr");
-    return (gap?.skills ?? []).filter(
-      (s) =>
-        !hiddenMarks.includes(s.mark ?? "none") &&
-        !hiddenTree.has(s.group_id === null ? UNSORTED : String(s.group_id)) &&
-        (!q || s.name.toLocaleLowerCase("tr").includes(q)),
-    );
-  }, [gap, query, hiddenMarks, hiddenTree]);
-
-  const treeOptions = useMemo(() => {
-    const skillsIn = (id: number) => {
-      const ids = new Set(descendants(tree, id));
-      return (gap?.skills ?? []).filter((s) => s.group_id !== null && ids.has(s.group_id)).length;
-    };
-    const options = flat(tree).map(({ group, depth }) => ({
-      value: String(group.id),
-      label: `${"   ".repeat(depth)}${group.name}`,
-      count: skillsIn(group.id),
-    }));
-    const unsorted = (gap?.skills ?? []).filter((s) => s.group_id === null).length;
-    return unsorted ? [...options, { value: UNSORTED, label: "Unsorted", count: unsorted }] : options;
-  }, [gap, tree]);
-
-  const markOptions = useMemo(
-    () => MARK_OPTIONS.map((o) => ({ ...o, count: (gap?.skills ?? []).filter((s) => (s.mark ?? "none") === o.value).length })),
-    [gap],
+  const roots = useMemo(
+    () => buildMap(nodes, hiddenTree, query, view === "diagram" ? "tree" : sort, filters.onlyAsked),
+    [nodes, hiddenTree, query, view, sort, filters.onlyAsked],
   );
+  const selectedNode = findNode(roots, selectedKey);
 
-  const setMark = async (skill: SkillRow, next: SkillMark | null) => {
-    setGap((g) => g && { ...g, skills: g.skills.map((s) => (s.id === skill.id ? { ...s, mark: next } : s)) });
+  // The pane beside the tree is never taller than the tree (--map-h): a long one scrolls on its own
+  // instead of making the page longer. Below the tree (a narrow window) only the screen limits it.
+  const mapShown = !!gap && roots.length > 0 && view !== "columns";
+  useEffect(() => {
+    const box = layout.current;
+    const main = box?.firstElementChild as HTMLElement | null;
+    if (!box || !main) return;
+    const fit = () => {
+      if (main.offsetWidth > box.clientWidth - 300) box.style.removeProperty("--map-h");
+      else box.style.setProperty("--map-h", `${main.offsetHeight}px`);
+    };
+    // Only the tree: the pane's own size changes the layout's, which would loop.
+    const observer = new ResizeObserver(fit);
+    observer.observe(main);
+    window.addEventListener("resize", fit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, [mapShown]);
+
+  /** Runs a change to the tree, then shows the tree as the server has it. */
+  const change = async (action: () => Promise<unknown>) => {
     try {
-      await api.updateSkill(skill.id, { mark: next }, groupId);
-      load(); // coverage changes
+      await action();
+      setError(null);
     } catch (e) {
       setError((e as Error).message);
-      load();
     }
+    load();
   };
+  const move = (id: number, parent: number | null, index: number) => {
+    setGap((g) => g && { ...g, skills: moved(g.skills, id, parent, index) });
+    if (parent !== null) set({ collapsed: collapsed.filter((c) => c !== `s${parent}`) });
+    change(() => api.updateSkill(id, { parent_id: parent, index }, null));
+  };
+  const unsort = (id: number) => change(() => api.updateSkill(id, { placed: false }, null));
+  const remove = (node: MapNode) => {
+    const s = node.skill;
+    if (!s) return false;
+    const n = node.direct;
+    const off = n ? ` It is taken off the ${n === 1 ? "posting that asks" : `${n} postings that ask`} for it, and reading them again won't add it back.` : "";
+    const under = s.placed && children(nodes, s.id).length ? " What is under it moves up one level." : "";
+    if ((off || under) && !confirm(`Remove ${s.name}?${off}${under}`)) return false;
+    if (selectedKey === node.key) set({ selected: null });
+    change(() => api.deleteSkill(s.id));
+    return true;
+  };
+  const edit: TreeEdit = {
+    onAdd: (parent) => setDialog({ add: parent }),
+    onEdit: (node) => setDialog({ edit: node }),
+    onRemove: remove,
+    drag: useTreeDrag(nodes, move, unsort),
+  };
+  const saveDialog = ({ name, description, isGroup }: NodeFields) => {
+    if (!dialog) return;
+    if ("add" in dialog) {
+      const parent = dialog.add?.skill?.id ?? null;
+      if (dialog.add) set({ collapsed: collapsed.filter((c) => c !== dialog.add!.key) });
+      change(() => api.createSkill({ name, description, is_group: isGroup, parent_id: parent }));
+    } else {
+      const s = dialog.edit.skill!;
+      const body: { name?: string; description?: string } = {};
+      if (name.trim() !== s.name) body.name = name;
+      if (description !== s.description) body.description = description;
+      if (Object.keys(body).length) change(() => api.updateSkill(s.id, body, null));
+    }
+    setDialog(null);
+  };
+  const total = gap?.extracted || gap?.targets || 0;
+  const select = (key: string) => set({ selected: key });
+
+  // The top two levels of the tree, each with how many asked-for skills are in it.
+  const treeOptions = useMemo(() => {
+    const asked = (id: number) => {
+      const ids = new Set(descendants(nodes, id));
+      return nodes.filter((n) => ids.has(n.id) && n.job_ids?.length).length;
+    };
+    const options = flat(nodes)
+      .filter(({ depth }) => depth <= 1)
+      .map(({ node, depth }) => ({ value: `s${node.id}`, label: `${"   ".repeat(depth)}${node.name}`, count: asked(node.id) }));
+    const unsorted = nodes.filter((n) => !n.placed).length;
+    return unsorted ? [...options, { value: UNSORTED, label: "Unsorted", count: unsorted }] : options;
+  }, [nodes]);
 
   const saveName = async () => {
     if (!naming || !naming.name.trim()) return setNaming(null);
@@ -146,101 +211,30 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
     }
   };
 
-  const toggle = (id: string) =>
-    set({ collapsed: collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id] });
-
-  /** Group headers with their skills; libraries under their language. */
-  function renderTree(): ReactNode[] {
-    if (!gap) return [];
-    const out: ReactNode[] = [];
-
-    const skillRow = (s: SkillRow, depth: number, parentName?: string) => (
-      <tr key={s.id} onClick={() => setOpenSkill(s.id)} className={s.mark === "ignore" ? "ignored" : ""}>
-        <td className="strong" style={{ paddingLeft: 12 + depth * 18 }}>
-          {s.name}
-          {parentName && <span className="muted parent-hint"> · {parentName}</span>}
-          {s.plan_note && <span className="plan-dot" title={s.plan_note} />}
-          {s.details.length > 0 && <div className="row-detail">{s.details.join(" · ")}</div>}
-        </td>
-        <td>
-          <div className="demand">
-            <div className="demand-bar" aria-hidden>
-              <span style={{ width: `${(s.jobs / gap.targets) * 100}%` }} />
-            </div>
-            <span className="num">
-              {s.jobs} of {gap.targets}
-            </span>
-          </div>
-        </td>
-        <td className="num muted">
-          {s.must} · {s.nice}
-        </td>
-        <td>
-          {s.years.map((y) => (
-            <span key={y} className="years-tag">
-              {y} yrs
-            </span>
-          ))}
-        </td>
-        <td>
-          <MarkPicker name={s.name} value={s.mark} onChange={(m) => setMark(s, m)} />
-        </td>
-      </tr>
-    );
-
-    // A skill and, under it, the skills that belong to it (pandas under Python).
-    const skillTree = (list: SkillRow[], depth: number) => {
-      const here = new Set(list.map((s) => s.id));
-      const byId = new Map(gap.skills.map((s) => [s.id, s]));
-      const roots = list.filter((s) => s.parent_id === null || !here.has(s.parent_id));
-      const walk = (s: SkillRow, d: number, parentName?: string) => {
-        out.push(skillRow(s, d, parentName));
-        list.filter((c) => c.parent_id === s.id).forEach((c) => walk(c, d + 1));
-      };
-      roots.forEach((s) => walk(s, depth, s.parent_id !== null ? byId.get(s.parent_id)?.name : undefined));
-    };
-
-    const header = (id: string, name: string, depth: number, list: SkillRow[]) => {
-      const have = list.filter((s) => s.mark === "have").length;
-      const closed = collapsed.includes(id);
-      out.push(
-        <tr key={`g${id}`} className={`group-row depth-${Math.min(depth, 2)}`} onClick={() => toggle(id)}>
-          <td colSpan={5} style={{ paddingLeft: 10 + depth * 18 }}>
-            <span className={`group-chevron ${closed ? "closed" : ""}`}>
-              <ChevronIcon />
-            </span>
-            {name}
-            <span className="group-count">
-              {list.length} · you have {have}
-            </span>
-          </td>
-        </tr>,
-      );
-      return closed;
-    };
-
-    const group = (g: SkillGroupNode, depth: number) => {
-      const ids = new Set(descendants(tree, g.id));
-      const inside = rows.filter((s) => s.group_id !== null && ids.has(s.group_id));
-      if (!inside.length) return;
-      if (header(String(g.id), g.name, depth, inside)) return;
-      skillTree(rows.filter((s) => s.group_id === g.id), depth + 1);
-      children(tree, g.id).forEach((c) => group(c, depth + 1));
-    };
-
-    children(tree, null).forEach((g) => group(g, 0));
-    const unsorted = rows.filter((s) => s.group_id === null || !tree.some((g) => g.id === s.group_id));
-    if (unsorted.length && !header(UNSORTED, "Unsorted", 0, unsorted)) skillTree(unsorted, 1);
-    return out;
-  }
+  const toggle = (key: string) =>
+    set({ collapsed: collapsed.includes(key) ? collapsed.filter((c) => c !== key) : [...collapsed, key] });
 
   const selected = groups.find((g) => g.id === groupId) ?? null;
   const groupOptions = [
     { value: "all", label: `All targets · ${groups.reduce((n, g) => n + g.job_count, 0)}` },
     ...groups.map((g) => ({ value: String(g.id), label: `${g.name} · ${g.job_count}` })),
   ];
-  const coverage = gap?.coverage ?? null;
-  const open = (gap?.skills ?? []).filter(isOpen).length;
+  // The chat takes the details' place while it is open; it stays mounted, so the conversation stays.
+  const side = (
+    <>
+      <SkillChat hidden={!chatOpen} onClose={() => setChatOpen(false)} />
+      {!chatOpen && (
+        <MapDetails
+          node={selectedNode}
+          total={total}
+          postings={gap?.postings ?? []}
+          roleGroupId={groupId}
+          onSelect={select}
+          onOpenJob={onOpenJob}
+        />
+      )}
+    </>
+  );
 
   return (
     <>
@@ -326,16 +320,20 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           <SearchIcon />
           <input type="search" placeholder="Search skills" value={query} onChange={(e) => set({ query: e.target.value })} />
         </label>
-        <MultiFilter label="Mark" options={markOptions} hidden={hiddenMarks} onChange={(h) => set({ hiddenMarks: h })} />
         <MultiFilter
           label="Show"
           options={treeOptions}
           hidden={treeOptions.map((o) => o.value).filter((v) => hiddenTree.has(v))}
           onChange={(h) => set({ hiddenTree: h })}
         />
-        <button onClick={() => setTreeOpen(true)} title="Rename, move and add groups, or ask the AI for recommendations">
-          <TreeIcon />
-          Edit tree
+        <button
+          className={chatOpen ? "active" : ""}
+          aria-pressed={chatOpen}
+          onClick={() => setChatOpen(!chatOpen)}
+          title="Discuss the tree with the AI you choose"
+        >
+          <SparkIcon />
+          Recommendations
         </button>
       </div>
 
@@ -350,52 +348,57 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           <div className="empty">
             <span className="spinner" aria-label="Loading" />
           </div>
-        ) : gap.targets === 0 ? (
-          <div className="empty hero">
-            <span className="logo big" aria-hidden>
-              <TargetIcon />
-            </span>
-            <p>
-              <strong>No target jobs{selected ? ` in ${selected.name}` : ""} yet.</strong>
-            </p>
-            <p className="gap-help">
-              Open any job, saved, applied or even rejected, and choose a role group under <b>Skill Gap</b>. Its
-              description is read and its requirements are added up here, so you can see what to learn next.
-            </p>
-          </div>
         ) : (
           <>
-            <section className="gap-summary">
-              <div className="coverage">
-                <div className="coverage-num">{coverage === null ? "–" : `${Math.round(coverage * 100)}%`}</div>
-                <div className="coverage-text">
-                  <strong>
-                    of what {selected ? `your ${selected.name} targets` : "your targets"} ask for, that you have
-                  </strong>
-                  <span className="muted">
-                    Must-haves count double. {open} requirement{open === 1 ? "" : "s"} to work on.
-                  </span>
-                  <div className="coverage-bar" aria-hidden>
-                    <span style={{ width: `${(coverage ?? 0) * 100}%` }} />
-                  </div>
-                </div>
-              </div>
-              <div className="gap-status">
-                <span className="chip">
-                  {gap.targets} target{gap.targets === 1 ? "" : "s"}
+            <div className="map-toolbar">
+              <Segmented
+                ariaLabel="View"
+                value={view}
+                onChange={(v) => set({ view: v })}
+                options={[
+                  { value: "diagram", label: "Diagram" },
+                  { value: "outline", label: "Outline" },
+                  { value: "columns", label: "Columns" },
+                ]}
+              />
+              {view !== "diagram" && (
+                <Segmented
+                  ariaLabel="Order"
+                  value={sort}
+                  onChange={(v) => set({ sort: v })}
+                  options={[
+                    { value: "tree", label: "Tree order" },
+                    { value: "count", label: "Most asked" },
+                    { value: "name", label: "A–Z" },
+                  ]}
+                />
+              )}
+              <label className="check-chip" title="Leave out the skills no posting asks for">
+                <input type="checkbox" checked={filters.onlyAsked} onChange={(e) => set({ onlyAsked: e.target.checked })} />
+                Only asked for
+              </label>
+              <button className="small" onClick={() => setDialog({ add: null })} title="Add a skill or group at the top level">
+                <PlusIcon />
+                Add at the top level
+              </button>
+              <span className="spacer" />
+              <span className="muted map-status">
+                {gap.targets === 0
+                  ? `No target jobs${selected ? ` in ${selected.name}` : ""} yet: choose a role group under Skill Gap on any job`
+                  : `${gap.extracted} of ${gap.targets} posting${gap.targets === 1 ? "" : "s"} read`}
+              </span>
+              {gap.pending > 0 && (
+                <span className="chip accent">
+                  <span className="spinner tiny" /> Reading {gap.pending}…
                 </span>
-                {gap.pending > 0 && (
-                  <span className="chip accent">
-                    <span className="spinner tiny" /> Reading {gap.pending}…
-                  </span>
-                )}
-                {gap.without_text > 0 && (
-                  <span className="chip warn" title="Open the job and paste its description">
-                    {gap.without_text} without a description
-                  </span>
-                )}
-                {gap.failed > 0 && <span className="chip warn">{gap.failed} couldn't be read</span>}
-                <span className="spacer" />
+              )}
+              {gap.without_text > 0 && (
+                <span className="chip warn" title="Open the job and paste its description">
+                  {gap.without_text} without a description
+                </span>
+              )}
+              {gap.failed > 0 && <span className="chip warn">{gap.failed} couldn't be read</span>}
+              {gap.targets > 0 && (
                 <button
                   className="small"
                   title="Read every target's description again, e.g. after changing the model. Uses one model call per target."
@@ -410,54 +413,60 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
                   <RefreshIcon />
                   Read again
                 </button>
-              </div>
-            </section>
+              )}
+            </div>
 
-            {rows.length === 0 ? (
-              <div className="empty">
-                {gap.skills.length === 0 ? "No requirements found yet." : "No requirements match these filters."}
-              </div>
+            {roots.length === 0 ? (
+              <div className="empty">{nodes.length === 0 ? "Your tree is empty. Add a skill or group at the top level." : "Nothing matches these filters."}</div>
+            ) : view === "columns" ? (
+              <ColumnsView roots={roots} total={total} selected={selectedNode} onSelect={select} edit={edit} details={side} />
             ) : (
-              <div className="table-wrap">
-                <table className="gap-table">
-                  <colgroup>
-                    <col />
-                    <col style={{ width: 190 }} />
-                    <col style={{ width: 120 }} />
-                    <col style={{ width: 110 }} />
-                    <col style={{ width: 290 }} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>Requirement</th>
-                      <th>Asked for in</th>
-                      <th>Must · Nice</th>
-                      <th>Years</th>
-                      <th>You</th>
-                    </tr>
-                  </thead>
-                  <tbody>{renderTree()}</tbody>
-                </table>
+              <div className="map-layout" ref={layout}>
+                <div className="map-main">
+                  {view === "outline" ? (
+                    <OutlineView
+                      roots={roots}
+                      total={total}
+                      selected={selectedNode}
+                      onSelect={select}
+                      edit={edit}
+                      collapsed={new Set(collapsed)}
+                      onToggle={toggle}
+                    />
+                  ) : (
+                    <DiagramView
+                      roots={roots}
+                      total={total}
+                      selected={selectedNode}
+                      onSelect={select}
+                      edit={edit}
+                      zoom={filters.zoom}
+                      onZoom={(zoom) => set({ zoom })}
+                    />
+                  )}
+                </div>
+                {side}
               </div>
             )}
           </>
         )}
       </main>
 
-      {treeOpen && <TreeDialog tree={tree} onChanged={load} onClose={() => setTreeOpen(false)} />}
-
-      {openSkill !== null && (
-        <SkillPanel
-          skillId={openSkill}
-          groupId={groupId}
-          onClose={() => setOpenSkill(null)}
-          onChanged={load}
-          onOpenJob={(id) => {
-            setOpenSkill(null);
-            onOpenJob(id);
-          }}
+      {dialog && (
+        <NodeDialog
+          title={"add" in dialog ? (dialog.add ? `Add under ${dialog.add.name}` : "Add at the top level") : `Edit ${dialog.edit.kind}`}
+          initial={
+            "add" in dialog
+              ? { name: "", description: "", isGroup: false }
+              : { name: dialog.edit.name, description: dialog.edit.description, isGroup: dialog.edit.kind === "group" }
+          }
+          pickKind={"add" in dialog}
+          onSave={saveDialog}
+          onRemove={"edit" in dialog ? () => remove(dialog.edit) : undefined}
+          onClose={() => setDialog(null)}
         />
       )}
+
     </>
   );
 }

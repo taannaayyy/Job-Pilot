@@ -9,225 +9,229 @@ from jobpilot import taxonomy
 from jobpilot.linkedin import fold
 from jobpilot.models import Importance
 
-# (name, category, aliases). Aliases match case-insensitively as whole words; "=X" matches
-# case-sensitively (for names that are also ordinary words: "React", "Spark"); "re:..." is a
-# regular expression. When an entry has such an alias, its name is only found through them.
-_ENTRIES: list[tuple[str, str, tuple[str, ...]]] = [
+# (name, aliases). The names match the tree's (taxonomy.py) where the tree has the skill; others
+# wait in Unsorted. Aliases match case-insensitively as whole words; "=X" matches case-sensitively (for names that are also ordinary
+# words: "React", "Spark"); "re:..." is a regular expression. When an entry has such an alias, its
+# name is only found through them.
+_ENTRIES: list[tuple[str, tuple[str, ...]]] = [
     # Programming languages
-    ("Python", "language", ("python3",)),
-    ("SQL", "language", ()),
-    ("Java", "language", ()),
-    ("JavaScript", "language", ("js", "ecmascript")),
-    ("TypeScript", "language", ()),
-    ("C++", "language", ("cpp",)),
-    ("C#", "language", ("csharp", "c sharp")),
-    ("C", "language", ("=C",)),
-    ("Go", "language", ("golang", r"re:\bGo\b(?=\s*(?:,|/|\)|and\b|or\b|$))")),
-    ("Rust", "language", ()),
-    ("R", "language", (r"re:(?<![\w&/.-])R(?![\w&+#'-])",)),
-    ("Scala", "language", ()),
-    ("Kotlin", "language", ()),
-    ("Swift", "language", ("=Swift",)),
-    ("Julia", "language", ()),
-    ("MATLAB", "language", ()),
-    ("Bash", "language", ("shell scripting",)),
-    ("CUDA", "language", ()),
-    ("PHP", "language", ()),
-    ("Ruby", "language", ()),
-    # ML and data frameworks and libraries
-    ("PyTorch", "framework", ("torch",)),
-    ("TensorFlow", "framework", ()),
-    ("Keras", "framework", ()),
-    ("JAX", "framework", ()),
-    ("scikit-learn", "framework", ("sklearn", "scikit learn")),
-    ("Hugging Face", "framework", ("huggingface", "hugging face transformers", "hf transformers")),
-    ("XGBoost", "framework", ()),
-    ("LightGBM", "framework", ()),
-    ("CatBoost", "framework", ()),
-    ("pandas", "framework", ()),
-    ("NumPy", "framework", ()),
-    ("SciPy", "framework", ()),
-    ("Polars", "framework", ()),
-    ("OpenCV", "framework", ()),
-    ("spaCy", "framework", ()),
-    ("NLTK", "framework", ()),
-    ("LangChain", "framework", ()),
-    ("LangGraph", "framework", ()),
-    ("LlamaIndex", "framework", ("llama index", "llama-index")),
-    ("vLLM", "framework", ()),
-    ("ONNX", "framework", ()),
-    ("TensorRT", "framework", ()),
-    ("Apache Spark", "framework", ("=Spark", "pyspark", "apache spark")),
-    ("Dask", "framework", ()),
-    ("Ray", "framework", ("=Ray",)),
-    ("FastAPI", "framework", ()),
-    ("Flask", "framework", ()),
-    ("Django", "framework", ()),
-    ("Streamlit", "framework", ()),
-    ("React", "framework", ("=React", "react.js", "reactjs")),
-    ("Node.js", "framework", ("nodejs", "node.js")),
-    ("Spring", "framework", (r"re:\bSpring\b(?!\s+(?:\d|semester|term|internship))", "spring boot")),
-    (".NET", "framework", ("dotnet",)),
-    ("Matplotlib", "framework", ()),
-    ("Plotly", "framework", ()),
+    ("Python", ("python3",)),
+    ("SQL", ()),
+    ("Java", ()),
+    ("JavaScript", ("js", "ecmascript")),
+    ("TypeScript", ()),
+    ("C++", ("cpp",)),
+    ("C#", ("csharp", "c sharp")),
+    ("C", ("=C",)),
+    ("Go", ("golang", r"re:\bGo\b(?=\s*(?:,|/|\)|and\b|or\b|$))")),
+    ("Rust", ()),
+    ("R", (r"re:(?<![\w&/.-])R(?![\w&+#'-])",)),
+    ("Scala", ()),
+    ("Kotlin", ()),
+    ("Swift", ("=Swift",)),
+    ("Julia", ()),
+    ("MATLAB", ()),
+    ("Bash", ("shell scripting",)),
+    ("CUDA", ()),
+    ("PHP", ()),
+    ("Ruby", ()),
+    # Libraries and frameworks (filed under their language)
+    ("PyTorch", ("torch",)),
+    ("TensorFlow", ()),
+    ("Keras", ()),
+    ("JAX", ()),
+    ("scikit-learn", ("sklearn", "scikit learn")),
+    ("Hugging Face", ("huggingface", "hugging face transformers", "hf transformers")),
+    ("XGBoost", ()),
+    ("LightGBM", ()),
+    ("CatBoost", ()),
+    ("pandas", ()),
+    ("NumPy", ()),
+    ("SciPy", ()),
+    ("Polars", ()),
+    ("OpenCV", ()),
+    ("spaCy", ()),
+    ("NLTK", ()),
+    ("LangChain", ()),
+    ("LangGraph", ()),
+    ("LlamaIndex", ("llama index", "llama-index")),
+    ("vLLM", ()),
+    ("ONNX", ()),
+    ("TensorRT", ()),
+    ("Apache Spark", ("=Spark", "pyspark", "apache spark")),
+    ("Dask", ()),
+    ("Ray", ("=Ray",)),
+    ("FastAPI", ()),
+    ("Flask", ()),
+    ("Django", ()),
+    ("Streamlit", ()),
+    ("React", ("=React", "react.js", "reactjs")),
+    ("Node.js", ("nodejs", "node.js")),
+    ("Spring", (r"re:\bSpring\b(?!\s+(?:\d|semester|term|internship))", "spring boot")),
+    (".NET", ("dotnet",)),
+    ("Matplotlib", ()),
+    ("Plotly", ()),
     # Tools and platforms
-    ("Docker", "tool", ("containers", "containerization")),
-    ("Kubernetes", "tool", ("k8s",)),
-    ("Git", "tool", ("github", "gitlab")),
-    ("Linux", "tool", ("unix",)),
-    ("Airflow", "tool", ("apache airflow",)),
-    ("Kafka", "tool", ("apache kafka",)),
-    ("dbt", "tool", ()),
-    ("MLflow", "tool", ()),
-    ("Weights & Biases", "tool", ("wandb", "w&b")),
-    ("Kubeflow", "tool", ()),
-    ("Terraform", "tool", ()),
-    ("CI/CD", "practice", ("ci / cd", "continuous integration", "continuous delivery", "continuous deployment")),
-    ("Jenkins", "tool", ()),
-    ("GitHub Actions", "tool", ()),
-    ("Tableau", "tool", ()),
-    ("Power BI", "tool", ("powerbi",)),
-    ("Looker", "tool", ()),
-    ("Excel", "tool", ("=Excel", "ms excel", "microsoft excel")),
-    ("Jupyter", "tool", ("jupyter notebooks",)),
-    ("Databricks", "tool", ()),
-    ("Snowflake", "database", ()),
-    ("Prometheus", "tool", ()),
-    ("Grafana", "tool", ()),
-    ("REST APIs", "concept", ("restful", "rest api", "rest apis", "restful apis")),
-    ("gRPC", "tool", ()),
-    ("GraphQL", "tool", ()),
+    ("Docker", ("containers", "containerization")),
+    ("Kubernetes", ("k8s",)),
+    ("Git", ("github", "gitlab")),
+    ("Linux", ("unix",)),
+    ("Airflow", ("apache airflow",)),
+    ("Kafka", ("apache kafka",)),
+    ("dbt", ()),
+    ("MLflow", ()),
+    ("Weights & Biases", ("wandb", "w&b")),
+    ("Kubeflow", ()),
+    ("Terraform", ()),
+    ("CI/CD", ("ci / cd", "continuous integration", "continuous delivery", "continuous deployment")),
+    ("Jenkins", ()),
+    ("GitHub Actions", ()),
+    ("Tableau", ()),
+    ("Power BI", ("powerbi",)),
+    ("Looker", ()),
+    ("Excel", ("=Excel", "ms excel", "microsoft excel")),
+    ("Jupyter", ("jupyter notebooks",)),
+    ("Databricks", ()),
+    ("Prometheus", ()),
+    ("Grafana", ()),
+    ("APIs", ("restful", "rest api", "rest apis", "restful apis", "api design", "api development")),
+    ("gRPC", ()),
+    ("GraphQL", ()),
     # Cloud
-    ("AWS", "cloud", ("amazon web services",)),
-    ("Amazon SageMaker", "cloud", ("sagemaker",)),
-    ("Google Cloud", "cloud", ("gcp", "google cloud platform")),
-    ("Vertex AI", "cloud", ()),
-    ("BigQuery", "database", ()),
-    ("Azure", "cloud", ("microsoft azure",)),
-    ("Azure ML", "cloud", ("azure machine learning",)),
+    ("AWS", ("amazon web services",)),
+    ("Amazon SageMaker", ("sagemaker",)),
+    ("Google Cloud", ("gcp", "google cloud platform")),
+    ("Vertex AI", ()),
+    ("BigQuery", ()),
+    ("Azure", ("microsoft azure",)),
+    ("Azure ML", ("azure machine learning",)),
     # Databases
-    ("PostgreSQL", "database", ("postgres",)),
-    ("MySQL", "database", ()),
-    ("MongoDB", "database", ("mongo",)),
-    ("Redis", "database", ()),
-    ("Elasticsearch", "database", ("elastic search", "opensearch")),
-    ("NoSQL", "database", ()),
-    ("Cassandra", "database", ()),
-    ("Vector databases", "database", ("vector database", "vector db", "vector dbs", "vector stores", "vector store")),
-    ("Pinecone", "database", ()),
-    ("Weaviate", "database", ()),
-    ("Milvus", "database", ()),
-    ("Qdrant", "database", ()),
-    ("Chroma", "database", ("=Chroma", "chromadb")),
-    ("pgvector", "database", ()),
-    ("FAISS", "database", ()),
-    # Concepts
-    ("Machine learning", "concept", ("ml",)),
-    ("Deep learning", "concept", ("dl",)),
-    ("NLP", "concept", ("natural language processing",)),
-    ("Computer vision", "concept", ()),
-    ("LLMs", "concept", ("llm", "large language models", "large language model", "genai", "generative ai", "gen ai")),
-    ("RAG", "concept", ("retrieval-augmented generation", "retrieval augmented generation")),
-    ("Transformers", "concept", ("transformer", "transformer architectures", "attention mechanism")),
-    ("Fine-tuning", "concept", ("fine tuning", "finetuning", "fine-tune", "fine tune", "lora", "peft", "qlora")),
-    ("Prompt engineering", "concept", ("prompting",)),
-    ("AI agents", "concept", ("agentic", "llm agents", "ai agents", "agent frameworks", "multi-agent", "tool calling", "function calling")),
-    ("Embeddings", "concept", ("embedding", "semantic search", "vector search")),
-    ("Recommender systems", "concept", ("recommendation systems", "recommender system", "recommendation engine", "recsys")),
-    ("Reinforcement learning", "concept", ("rl", "rlhf")),
-    ("Time series", "concept", ("time-series", "forecasting")),
-    ("Statistics", "concept", ("statistical", "statistical modeling", "statistical modelling")),
-    ("Probability", "concept", ()),
-    ("Linear algebra", "concept", ()),
-    ("Optimization", "concept", ("optimisation",)),
-    ("A/B testing", "practice", ("ab testing", "a/b tests", "experimentation", "a/b test")),
-    ("Causal inference", "concept", ()),
-    ("Feature engineering", "concept", ()),
-    ("Data visualization", "concept", ("data visualisation", "dashboards")),
-    ("ETL", "concept", ("elt", "data pipelines", "data pipeline")),
-    ("Data warehousing", "concept", ("data warehouse", "data lake", "lakehouse")),
-    ("Distributed systems", "concept", ("distributed computing",)),
-    ("Distributed training", "concept", ("multi-gpu", "gpu training")),
-    ("Microservices", "concept", ("microservice",)),
-    ("System design", "concept", ("software architecture",)),
-    ("Data structures and algorithms", "concept", ("data structures", "algorithms and data structures")),
-    ("Object-oriented programming", "concept", ("oop", "object oriented")),
-    ("Speech recognition", "concept", ("asr", "speech-to-text")),
-    ("Model evaluation", "practice", ("evaluation frameworks", "evals", "llm evaluation", "model evaluation")),
-    ("Model deployment", "practice", ("model serving", "deploy models", "deploying models", "productionizing", "model inference")),
-    ("Monitoring", "practice", ("observability", "model monitoring")),
-    # Practices
-    ("MLOps", "practice", ("ml ops", "llmops")),
-    ("Software testing", "practice", ("unit testing", "unit tests", "integration tests", "automated testing", "test-driven development", "tdd")),
-    ("Agile", "practice", ("scrum", "kanban")),
-    ("Code review", "practice", ("code reviews",)),
-    ("Research publications", "practice", ("publications", "published papers", "peer-reviewed", "neurips", "icml", "acl", "cvpr", "iclr")),
-    ("Open-source contributions", "practice", ("open source contributions", "contributions to open source", "open-source projects", "open source projects")),
+    ("PostgreSQL", ("postgres",)),
+    ("MySQL", ()),
+    ("MongoDB", ("mongo",)),
+    ("Redis", ()),
+    ("Elasticsearch", ("elastic search", "opensearch")),
+    ("Relational (SQL)", ("relational databases", "relational database", "rdbms")),
+    ("NoSQL", ()),
+    ("Cassandra", ()),
+    ("Snowflake", ()),
+    ("Vector databases", ("vector database", "vector db", "vector dbs", "vector stores", "vector store")),
+    ("Pinecone", ()),
+    ("Weaviate", ()),
+    ("Milvus", ()),
+    ("Qdrant", ()),
+    ("Chroma", ("=Chroma", "chromadb")),
+    ("pgvector", ()),
+    ("FAISS", ()),
+    # Machine learning
+    ("Machine learning", ("ml", "artificial intelligence")),
+    ("Classical ML", ("classical machine learning", "traditional machine learning", "classical ml",
+                               "traditional ml", "classic ml")),
+    ("Regression", (r"re:(?i:\b(?:linear |logistic )?regression\b(?!\s+test))",)),
+    ("Classification", (r"re:(?i:(?<!image )(?<!text )\bclassification\b)",)),
+    ("Clustering", ()),
+    ("Tree-based models", ("tree based models", "decision trees", "decision tree", "random forest",
+                                        "random forests", "gradient boosting", "gradient boosted trees")),
+    ("Feature engineering", ()),
+    ("Model training", ("training models", "train models")),
+    ("Model evaluation", ("evaluation frameworks", "evals", "llm evaluation")),
+    ("Recommender systems", ("recommendation systems", "recommender system", "recommendation engine", "recsys")),
+    ("Reinforcement learning", ("rl", "rlhf")),
+    ("Time series", ("time-series", "forecasting")),
+    # Deep learning
+    ("Deep learning", ("dl",)),
+    ("Neural networks", ("neural network",)),
+    ("CNNs", ("cnn", "convolutional neural networks", "convolutional neural network")),
+    ("RNNs", ("rnn", "lstm", "lstms", "recurrent neural networks")),
+    ("Transformers", ("transformer", "transformer architectures", "attention mechanism")),
+    ("Diffusion models", ("diffusion model", "stable diffusion")),
+    ("Distributed training", ("multi-gpu", "gpu training")),
+    # Computer vision
+    ("Computer vision", ()),
+    ("Object detection", ("detection models",)),
+    ("Image segmentation", ("semantic segmentation", "instance segmentation",
+                                         r"re:(?i:(?<!customer )(?<!market )(?<!user )\bsegmentation\b)")),
+    ("Image classification", ()),
+    ("Object tracking", ("multi-object tracking",)),
+    ("Pose estimation", ()),
+    ("OCR", ("optical character recognition",)),
+    ("YOLO", (r"re:\bYOLO(?:v?\d+)?\b", r"re:(?i:\byolov\d+\b)")),
+    ("U-Net", ("unet",)),
+    ("ResNet", ()),
+    ("Vision transformers", ("vision transformer", "vit")),
+    # NLP and LLMs
+    ("NLP", ("natural language processing",)),
+    ("Named entity recognition", ("ner",)),
+    ("Sentiment analysis", ()),
+    ("Text classification", ()),
+    ("Machine translation", ()),
+    ("Embeddings", ("embedding", "semantic search", "vector search")),
+    ("Language models", (r"re:(?i:(?<!large )(?<!large-)\blanguage models?\b)",)),
+    ("BERT", ("roberta",)),
+    ("Speech recognition", ("asr", "speech-to-text")),
+    ("Generative AI", ("genai", "generative ai", "gen ai")),
+    ("LLMs", ("llm", "large language models", "large language model")),
+    ("RAG", ("retrieval-augmented generation", "retrieval augmented generation")),
+    ("Fine-tuning", ("fine tuning", "finetuning", "fine-tune", "fine tune", "lora", "peft", "qlora")),
+    ("Prompt engineering", ("prompting",)),
+    ("AI agents", ("agentic", "llm agents", "agent frameworks", "multi-agent", "tool calling", "function calling")),
+    ("GPT", ("gpt-4", "gpt-4o", "chatgpt")),
+    ("Llama", ("llama 2", "llama 3")),
+    # Data and statistics
+    ("Statistics", ("statistical", "statistical modeling", "statistical modelling")),
+    ("Probability", ()),
+    ("Linear algebra", ()),
+    ("Optimization", ("optimisation",)),
+    ("A/B testing", ("ab testing", "a/b tests", "experimentation", "a/b test")),
+    ("Hypothesis testing", ()),
+    ("Causal inference", ()),
+    ("Exploratory data analysis", ("=EDA", "exploratory analysis")),
+    ("Data preprocessing", ("data cleaning", "data preparation", "preprocessing")),
+    ("Data mining", ()),
+    ("Data visualization", ("data visualisation", "dashboards")),
+    ("ETL", ("elt", "data pipelines", "data pipeline")),
+    ("Data warehousing", ("data warehouse", "data lake", "lakehouse")),
+    # Software engineering
+    ("Distributed systems", ("distributed computing",)),
+    ("Microservices", ("microservice",)),
+    ("System design", ("software architecture",)),
+    ("Data structures and algorithms", ("data structures", "algorithms and data structures")),
+    ("Object-oriented programming", ("oop", "object oriented")),
+    ("Software testing", ("unit testing", "unit tests", "integration tests", "automated testing", "test-driven development", "tdd")),
+    ("Agile", ("scrum", "kanban")),
+    ("Code review", ("code reviews",)),
+    # MLOps
+    ("MLOps", ("ml ops", "llmops")),
+    ("Model deployment", ("model serving", "deploy models", "deploying models", "productionizing", "model inference")),
+    ("Monitoring", ("observability", "model monitoring")),
+    # Domains
+    ("Pharmaceuticals", ("pharmaceutical", "pharma", "pharmaceutical industry")),
+    # Track record
+    ("Research publications", ("publications", "published papers", "peer-reviewed", "neurips", "icml", "acl", "cvpr", "iclr")),
+    ("Open-source contributions", ("open source contributions", "contributions to open source", "open-source projects", "open source projects")),
     # Soft skills
-    ("Communication", "soft_skill", (
+    ("Communication", (
         r"re:(?i)communication skills|communicator|(?:strong|excellent|good|clear|effective|written and verbal|verbal and written) communication|communicat\w* (?:clearly|effectively)",
     )),
-    ("Teamwork", "soft_skill", ("team player", "collaboration skills", "teamwork skills")),
-    ("Problem solving", "soft_skill", ("problem-solving",)),
-    ("Mentoring", "soft_skill", ("mentor", "mentoring others")),
-    ("Stakeholder management", "soft_skill", ("managing stakeholders", "stakeholder communication")),
+    ("Teamwork", ("team player", "collaboration skills", "teamwork skills")),
+    ("Problem solving", ("problem-solving",)),
+    ("Mentoring", ("mentor", "mentoring others")),
+    ("Stakeholder management", ("managing stakeholders", "stakeholder communication")),
 ]
 
-# Where each entry goes in the tree (taxonomy.py): by its kind above, unless named here.
-_GROUP_BY_KIND = {
-    "language": "tech.languages", "framework": "tech.libraries", "tool": "tech.mlops", "cloud": "tech.cloud",
-    "database": "tech.databases", "concept": "know.ml", "practice": "know.swe", "soft_skill": "soft",
-}
-_GROUP_BY_NAME = {
-    "SQL": "tech.databases", "Apache Spark": "tech.data_eng", "Dask": "tech.data_eng", "Ray": "tech.data_eng",
-    "Docker": "tech.cloud", "Kubernetes": "tech.cloud", "Terraform": "tech.cloud", "Linux": "tech.cloud",
-    "Airflow": "tech.data_eng", "Kafka": "tech.data_eng", "dbt": "tech.data_eng", "Databricks": "tech.data_eng",
-    "Snowflake": "tech.databases", "BigQuery": "tech.databases",
-    "Tableau": "tech.bi", "Power BI": "tech.bi", "Looker": "tech.bi", "Excel": "tech.bi",
-    "gRPC": "know.swe", "GraphQL": "know.swe", "REST APIs": "know.swe",
-    "Deep learning": "know.dl", "NLP": "know.dl", "Computer vision": "know.dl", "Transformers": "know.dl",
-    "Speech recognition": "know.dl", "Distributed training": "know.dl",
-    "LLMs": "know.genai", "RAG": "know.genai", "Fine-tuning": "know.genai", "Prompt engineering": "know.genai",
-    "AI agents": "know.genai", "Embeddings": "know.genai",
-    "Statistics": "know.data", "Probability": "know.data", "Linear algebra": "know.data", "A/B testing": "know.data",
-    "Causal inference": "know.data", "Data visualization": "know.data",
-    "ETL": "tech.data_eng", "Data warehousing": "tech.data_eng",
-    "Distributed systems": "know.swe", "Microservices": "know.swe", "System design": "know.swe",
-    "Data structures and algorithms": "know.swe", "Object-oriented programming": "know.swe",
-    "Model evaluation": "know.ml", "Model deployment": "tech.mlops", "Monitoring": "tech.mlops", "MLOps": "tech.mlops",
-    "CI/CD": "tech.mlops", "Research publications": "experience", "Open-source contributions": "experience",
-    "ONNX": "tech.mlops", "TensorRT": "tech.mlops",
-}
-# What a skill belongs to: libraries to their language, cloud services to their cloud.
-PARENTS = {
-    **{lib: "Python" for lib in (
-        "PyTorch", "TensorFlow", "Keras", "JAX", "scikit-learn", "Hugging Face", "XGBoost", "LightGBM", "CatBoost",
-        "pandas", "NumPy", "SciPy", "Polars", "OpenCV", "spaCy", "NLTK", "LangChain", "LangGraph", "LlamaIndex",
-        "vLLM", "FastAPI", "Flask", "Django", "Streamlit", "Matplotlib", "Plotly",
-    )},
-    "React": "JavaScript", "Node.js": "JavaScript", "Spring": "Java", ".NET": "C#",
-    "Amazon SageMaker": "AWS", "Vertex AI": "Google Cloud", "Azure ML": "Azure", "BigQuery": "Google Cloud",
-    **{db: "Vector databases" for db in ("Pinecone", "Weaviate", "Milvus", "Qdrant", "Chroma", "pgvector", "FAISS")},
-}
-
-
-def group_of(name: str, kind: str) -> str:
-    return _GROUP_BY_NAME.get(name) or _GROUP_BY_KIND.get(kind, kind)
+# Never what years of experience are about: "5+ years, strong communication" is overall experience.
+_NO_YEARS = {"Research publications", "Open-source contributions", "Communication", "Teamwork", "Problem solving", "Mentoring", "Stakeholder management"}
+DEGREES = ("PhD", "Master's degree", "Bachelor's degree")
 
 
 @dataclass(frozen=True)
 class Found:
     name: str
-    group: str  # a tree key from taxonomy.py
     importance: Importance
     evidence: str
     min_years: int | None = None
     max_years: int | None = None
     detail: str | None = None  # degrees: the fields of study
-
-    @property
-    def parent(self) -> str | None:
-        return PARENTS.get(self.name)
 
 
 def skill_key(name: str) -> str:
@@ -248,22 +252,21 @@ def _alias_pattern(alias: str) -> str:
     return rf"(?i:(?<![\w+#]){words}(?![\w+#]|\.\w))"
 
 
-_BY_KEY: dict[str, tuple[str, str]] = {}
-_PATTERNS: list[tuple[re.Pattern, str, str]] = []
-for _name, _kind, _aliases in _ENTRIES:
-    _category = group_of(_name, _kind)
+_BY_KEY: dict[str, str] = {}
+_PATTERNS: list[tuple[re.Pattern, str]] = []
+for _name, _aliases in _ENTRIES:
     for _alias in (_name, *_aliases):
         if not _alias.startswith(("re:", "=")):
-            _BY_KEY.setdefault(skill_key(_alias), (_name, _category))
+            _BY_KEY.setdefault(skill_key(_alias), _name)
     special = [a for a in _aliases if a.startswith(("re:", "="))]
     plain = [a for a in (*(() if special else (_name,)), *_aliases) if not a.startswith(("re:", "="))]
     # Longest first, so "hugging face transformers" wins over "transformers" on the same words.
     alts = sorted(plain, key=len, reverse=True)
-    _PATTERNS.append((re.compile("|".join([*(_alias_pattern(a) for a in alts), *(_alias_pattern(a) for a in special)])), _name, _category))
+    _PATTERNS.append((re.compile("|".join([*(_alias_pattern(a) for a in alts), *(_alias_pattern(a) for a in special)])), _name))
 
 
-def lookup(name: str) -> tuple[str, str] | None:
-    """The dictionary's name and tree group key for a name or alias, or None."""
+def lookup(name: str) -> str | None:
+    """The dictionary's name for a name or alias, or None."""
     return _BY_KEY.get(skill_key(name))
 
 
@@ -403,7 +406,7 @@ def find(text: str | None) -> list[Found]:
             return
         stronger = current.importance == Importance.NICE and item.importance == Importance.MUST
         found[item.name] = Found(
-            item.name, item.group,
+            item.name,
             Importance.MUST if stronger or current.importance == Importance.MUST else Importance.NICE,
             item.evidence if stronger else current.evidence,
             current.min_years if current.min_years is not None else item.min_years,
@@ -418,24 +421,24 @@ def find(text: str | None) -> list[Found]:
         field_list = degrees and _FIELDS.search(line)
         span = years(line)
         named = []
-        for pattern, name, category in _PATTERNS:
+        for pattern, name in _PATTERNS:
             if not field_list and pattern.search(line):
-                named.append((name, category))
+                named.append(name)
         # "3+ years of Python and SQL": the years are about Python and SQL. Without a skill
         # named next to them, they are overall experience.
-        about = [n for n in named if n[1] not in ("soft", "experience")]
-        for name, category in named:
-            y = span if span and (name, category) in about else None
-            add(Found(name, category, importance, evidence, y and y[0], y and y[1]))
+        about = [n for n in named if n not in _NO_YEARS]
+        for name in named:
+            y = span if span and name in about else None
+            add(Found(name, importance, evidence, y and y[0], y and y[1]))
         if span and not about and not degrees:
-            add(Found(taxonomy.OVERALL_EXPERIENCE, "experience", importance, evidence, span[0], span[1]))
+            add(Found(taxonomy.OVERALL_EXPERIENCE, importance, evidence, span[0], span[1]))
         # "BSc or MSc": the lower degree is what's required, a higher one is a plus.
         alternatives = len(degrees) > 1 and re.search(r"\bor\b|/|veya|ya da", line, re.IGNORECASE)
         fields = degree_fields(line) if degrees else None
         for name in degrees:
             lowest = name == degrees[-1]  # _EDUCATION is ordered highest first
-            add(Found(name, "education", importance if lowest or not alternatives else Importance.NICE, evidence, detail=fields))
+            add(Found(name, importance if lowest or not alternatives else Importance.NICE, evidence, detail=fields))
         for name, pattern in _SPOKEN.items():
             if pattern.search(line) and (_SPOKEN_CONTEXT.search(line) or len(line.split()) <= 3):
-                add(Found(name, "spoken", importance, evidence))
+                add(Found(name, importance, evidence))
     return list(found.values())

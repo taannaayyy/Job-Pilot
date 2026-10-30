@@ -155,15 +155,6 @@ export const ChevronIcon = () => (
   </svg>
 );
 
-export const TreeIcon = () => (
-  <svg {...base}>
-    <rect x="3" y="3" width="7" height="5" rx="1.5" />
-    <rect x="14" y="10" width="7" height="5" rx="1.5" />
-    <rect x="14" y="17" width="7" height="4" rx="1.5" />
-    <path d="M6.5 8v10.5H14M6.5 12.5H14" />
-  </svg>
-);
-
 export const SendIcon = () => (
   <svg {...base}>
     <path d="M5 12h14M13 6l6 6-6 6" />
@@ -172,26 +163,21 @@ export const SendIcon = () => (
 
 
 
-export const GripIcon = () => (
-  <svg {...base}>
-    <circle cx="9" cy="6" r="1" />
-    <circle cx="15" cy="6" r="1" />
-    <circle cx="9" cy="12" r="1" />
-    <circle cx="15" cy="12" r="1" />
-    <circle cx="9" cy="18" r="1" />
-    <circle cx="15" cy="18" r="1" />
-  </svg>
-);
-
-export const FolderPlusIcon = () => (
-  <svg {...base}>
-    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-    <path d="M12 10v6M9 13h6" />
-  </svg>
-);
-
 export const TrashIcon = () => (
   <svg {...base}>
     <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+  </svg>
+);
+
+export const MinusIcon = () => (
+  <svg {...base}>
+    <path d="M5 12h14" />
+  </svg>
+);
+
+export const EditIcon = () => (
+  <svg {...base}>
+    <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
+    <path d="m13.5 6.5 4 4" />
   </svg>
 );

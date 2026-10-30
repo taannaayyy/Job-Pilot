@@ -42,7 +42,7 @@ def main() -> None:
     overrides = {"model": args.model} if args.model else {}
     provider = settings.provider(args.provider, overrides)
     if args.prompt:
-        print("---- system prompt\n" + ai.SYSTEM + "\n---- prompt\n" + ai.prompt(tree.groups) + "<the job description>\n")
+        print("---- system prompt\n" + ai.SYSTEM + "\n---- prompt\n" + ai.prompt(tree.text) + "<the job description>\n")
 
     print(f"---- {title}: {provider.describe()}, the model decides must/nice: {provider.model_decides}\n")
     trace: list[str] = []
@@ -50,16 +50,13 @@ def main() -> None:
     result = extraction.extract(text, provider, trace, tree)
     print("\n".join(trace))
     print(f"\n---- result ({time.monotonic() - started:.1f}s, {result.used}){' WARNING: ' + result.warning if result.warning else ''}")
-    paths = {key: path for path, key in tree.key_of_path.items() if key}
-    by_group: dict[str, list] = {}
-    for i in result.items:
-        by_group.setdefault(paths.get(i.group_key or "", i.group_path or "Unsorted"), []).append(i)
-    for group in sorted(by_group):
-        def show(i):
-            y = f" {i.min_years}{'-' + str(i.max_years) if i.max_years else '+'}y" if i.min_years else ""
-            return f"{i.name}{y}{' (nice)' if i.importance == 'nice' else ''}{' <' + i.parent if i.parent else ''}{'*' if i.source == 'model' else ''}"
-        print(f"{group}: " + ", ".join(show(i) for i in by_group[group]))
-    print("* added by the model · <X belongs to X · (nice) nice to have")
+    def show(i):
+        y = f" {i.min_years}{'-' + str(i.max_years) if i.max_years else '+'}y" if i.min_years else ""
+        return f"{i.name}{y}{' (nice)' if i.importance == 'nice' else ''}{'*' if i.source == 'model' else ''}"
+    in_tree = [i for i in result.items if extraction.skills.skill_key(i.name) in tree.keys]
+    print("In the tree: " + ", ".join(show(i) for i in in_tree))
+    print("Unsorted: " + ", ".join(show(i) for i in result.items if i not in in_tree))
+    print("* added by the model · (nice) nice to have")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from jobpilot import ai, extraction, skills
+from jobpilot import ai, extraction, skills, taxonomy
 from jobpilot.main import create_app
 from jobpilot.models import Importance
 
@@ -77,8 +77,8 @@ def test_dictionary_keeps_similar_languages_apart():
 
 
 def test_lookup_merges_spellings():
-    assert skills.lookup("pytorch")[0] == skills.lookup("Torch")[0] == "PyTorch"
-    assert skills.lookup("Hugging Face Transformers")[0] == "Hugging Face"
+    assert skills.lookup("pytorch") == skills.lookup("Torch") == "PyTorch"
+    assert skills.lookup("Hugging Face Transformers") == "Hugging Face"
     assert skills.lookup("Underwater basket weaving") is None
 
 
@@ -98,10 +98,10 @@ class FakeModel(ai.Provider):
 
 def test_model_only_adds_skills_the_dictionary_doesnt_know():
     model = FakeModel([
-        ai.ModelItem("Experience with PyTorch and Docker", "experience", Importance.NICE, "PyTorch and Docker"),
-        ai.ModelItem("torch", "framework", Importance.NICE, "PyTorch"),
-        ai.ModelItem("Ranking models", "concept", Importance.MUST, "ranking models"),
-        ai.ModelItem("Kafka", "tool", Importance.MUST, "Kafka"),  # not in the posting
+        ai.ModelItem("Experience with PyTorch and Docker", Importance.NICE, "PyTorch and Docker"),
+        ai.ModelItem("torch", Importance.NICE, "PyTorch"),
+        ai.ModelItem("Ranking models", Importance.MUST, "ranking models"),
+        ai.ModelItem("Kafka", Importance.MUST, "Kafka"),  # not in the posting
     ])
     result = extraction.extract("Requirements\n- PyTorch\n- Docker\n- Ranking models", model)
     by_name = {i.name: i for i in result.items}
@@ -132,7 +132,7 @@ Knowledge of pharmaceutical industry
 
 def test_tasks_are_not_skills():
     model = FakeModel([
-        ai.ModelItem(n, "tool", Importance.MUST, "")
+        ai.ModelItem(n, Importance.MUST, "")
         for n in [
             "Business translation", "Monitoring", "Report preparation", "Model documentation",
             "Hands-on experience with data preprocessing, feature engineering, model training, and model evaluation",
@@ -146,7 +146,7 @@ def test_tasks_are_not_skills():
                  "Data visualization tools", "Stakeholder management", "Teamwork", "Data structures and algorithms"]:
         assert task not in found, task
     # A category with its examples counts, and so does each example.
-    assert {"Data preprocessing", "Model training", "Exploratory Data Analysis", "Pharmaceutical industry",
+    assert {"Data preprocessing", "Model training", "Exploratory data analysis", "Pharmaceuticals",
             "Cloud environments"} <= set(found)
     assert {"Feature engineering", "Model evaluation", "AWS", "Azure", "Google Cloud", "Tableau"} <= set(found)
 
@@ -180,8 +180,8 @@ def test_sentence_headings():
 
 def test_model_names_for_degrees_and_languages_are_merged():
     model = FakeModel([
-        ai.ModelItem("BSc in Computer Science", "education", Importance.MUST, "BSc"),
-        ai.ModelItem("Fluent English", "spoken_language", Importance.MUST, "Fluent English"),
+        ai.ModelItem("BSc in Computer Science", Importance.MUST, "BSc"),
+        ai.ModelItem("Fluent English", Importance.MUST, "Fluent English"),
     ])
     result = extraction.extract("Requirements\n- BSc in CS\n- Fluent English", model)
     assert {i.name: i.importance for i in result.items} == {"Bachelor's degree": Importance.MUST, "English": Importance.MUST}
@@ -250,8 +250,8 @@ def test_only_targets_count(client):
     target(client)
     plain = client.post("/api/jobs", json={"company": "Beta", "title": "Data Scientist"}).json()
     client.patch(f"/api/jobs/{plain['id']}", json={"raw_text": "Requirements\n- Tableau"})
-    names_ = {s["name"] for s in client.get("/api/skill-gap").json()["skills"]}
-    assert "Tableau" not in names_ and "Python" in names_
+    rows = {s["name"]: s for s in client.get("/api/skill-gap").json()["skills"]}
+    assert rows["Tableau"]["jobs"] == 0 and rows["Python"]["jobs"] == 1
 
 
 def test_requirements_the_user_adds_survive_a_new_extraction(client):
@@ -264,7 +264,7 @@ def test_requirements_the_user_adds_survive_a_new_extraction(client):
     # Removed stays removed and added stays added when the description is read again.
     job = client.post(f"/api/jobs/{job['id']}/extract").json()
     assert {r["name"]: r["source"] for r in job["requirements"]} == {"Ranking models": "user"}
-    assert "Python" not in {s["name"] for s in client.get("/api/skill-gap").json()["skills"]}
+    assert next(s for s in client.get("/api/skill-gap").json()["skills"] if s["name"] == "Python")["jobs"] == 0
 
     # Adding it back by hand undoes the removal.
     job = client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "python"}).json()
@@ -431,8 +431,8 @@ The key duties are;
 class DecidingModel(FakeModel):
     def __init__(self, decides):
         super().__init__([
-            ai.ModelItem("Python", "language", Importance.MUST, "Python"),
-            ai.ModelItem("Experience with Kubernetes", "tool", Importance.NICE, "Kubernetes"),
+            ai.ModelItem("Python", Importance.MUST, "Python"),
+            ai.ModelItem("Experience with Kubernetes", Importance.NICE, "Kubernetes"),
         ])
         self.config = {"model": "fake", "model_decides": decides}
 
@@ -449,7 +449,7 @@ def test_otherwise_the_dictionary_decides():
 
 
 def test_the_degree_rule_holds_even_when_the_model_decides():
-    model = FakeModel([ai.ModelItem("BSc or MSc degree", "education", Importance.MUST, "BSc or MSc")])
+    model = FakeModel([ai.ModelItem("BSc or MSc degree", Importance.MUST, "BSc or MSc")])
     model.config = {"model": "fake", "model_decides": True}
     found = {i.name: i.importance for i in extraction.extract("Requirements\nBSc or MSc degree", model).items}
     assert (found["Bachelor's degree"], found["Master's degree"]) == (Importance.MUST, Importance.NICE)
@@ -591,139 +591,184 @@ def test_years_go_on_the_skill_they_are_about():
     found = {f.name: f for f in skills.find("Requirements\n- 3-5 years of Python and SQL\n- 5+ years of professional experience")}
     assert (found["Python"].min_years, found["Python"].max_years) == (3, 5)
     assert (found["SQL"].min_years, found["SQL"].max_years) == (3, 5)
-    assert (found["Professional experience"].min_years, found["Professional experience"].group) == (5, "experience")
+    assert found["Professional experience"].min_years == 5
 
 
-def test_degrees_carry_their_fields_and_libraries_their_language():
+def test_degrees_carry_their_fields():
     found = {f.name: f for f in skills.find(
-        "Requirements\nBSc in a quantitative field such as Computer Engineering, Mathematics, or related disciplines\npandas, PyTorch")}
+        "Requirements\nBSc in a quantitative field such as Computer Engineering, Mathematics, or related disciplines")}
     assert found["Bachelor's degree"].detail == "Computer Engineering, Mathematics"
-    assert found["pandas"].parent == found["PyTorch"].parent == "Python"
-    assert (found["pandas"].group, found["SQL"].group if "SQL" in found else "tech.databases") == ("tech.libraries", "tech.databases")
 
 
-def test_the_model_files_in_the_users_tree_and_reports_years():
+def test_the_starting_tree_is_the_users():
+    nodes = list(taxonomy.nodes())
+    assert nodes[0] == ("Technologies", None, 0, True)  # a group: only organizes
+    assert ("YOLO", "Object detection", 0, False) in nodes and ("Computer vision", "Deep learning", 0, False) in nodes
+    assert ("Machine learning", "Technologies", 1, False) in nodes  # a skill that holds skills
+    assert ("Soft skills", None, 3, True) in nodes
+    # No two nodes share a name.
+    assert len({skills.skill_key(n) for n, _, _, _ in nodes}) == len(nodes)
+
+
+def test_the_model_writes_skills_the_way_the_tree_names_them():
     tree = extraction.Tree.default()
     model = FakeModel([
-        ai.ModelItem("Model training", "Knowledge areas › Machine learning", Importance.MUST, "model training"),
-        ai.ModelItem("Professional experience", "Experience", Importance.MUST, "3+ years", min_years=3),
-        ai.ModelItem("Python", "Technologies › Programming languages", Importance.MUST, "", min_years=2, max_years=4),
-        ai.ModelItem("Quantitative field degree", "Education", Importance.MUST, "quantitative field"),
-        ai.ModelItem("Feast", "Technologies › MLOps & dev tools", Importance.NICE, "Feast", parent="Made-up parent"),
+        ai.ModelItem("Learning to rank", Importance.MUST, "learning to rank"),
+        ai.ModelItem("Professional experience", Importance.MUST, "3+ years", min_years=3),
+        ai.ModelItem("Python", Importance.MUST, "", min_years=2, max_years=4),
+        ai.ModelItem("Quantitative field degree", Importance.MUST, "quantitative field"),
+        # Mapped onto the tree: the posting's words differ, the tree's name is kept, whole.
+        ai.ModelItem("Deep learning", Importance.MUST, "deep neural networks"),
+        ai.ModelItem("Data structures and algorithms", Importance.NICE, "DSA"),
+        ai.ModelItem("Made up thing", Importance.MUST, "made up"),  # not in the posting, not in the tree
     ])
-    text = "Requirements\n- 3+ years in industry\n- Python\n- Model training\n- A quantitative field degree\n- Feast"
+    text = ("Requirements\n- 3+ years in industry\n- Python\n- Learning to rank\n- A quantitative field degree\n"
+            "- Deep neural networks\n- DSA")
     found = {i.name: i for i in extraction.extract(text, model, tree=tree).items}
-    assert model.tree == tree.groups  # the model saw the tree
-    assert found["Model training"].group_path == "Knowledge areas › Machine learning"
-    assert (found["Professional experience"].min_years, found["Professional experience"].group_key) == (3, "experience")
+    assert model.tree == tree.text  # the model saw the tree
+    assert found["Learning to rank"].source == "model"
+    assert found["Professional experience"].min_years == 3
     assert (found["Python"].min_years, found["Python"].max_years) == (2, 4)  # years from the model on a dictionary skill
     assert "Quantitative field degree" not in found  # degrees come from the dictionary
-    assert found["Feast"].parent == "Made-up parent"
+    assert {"Deep learning", "Data structures and algorithms"} <= set(found)
+    assert "Made up thing" not in found
 
 
-def test_the_prompt_lists_the_tree():
-    text = ai.prompt(ai.default_tree())
-    assert "- Technologies › Cloud & infrastructure: AWS" in text and "- Soft skills:" in text
-    assert ai.schema(ai.default_tree())["properties"]["requirements"]["items"]["properties"]["group"]["enum"][0] == (
-        "Technologies › Programming languages"
-    )
+def test_the_prompt_shows_the_tree():
+    text = ai.prompt(extraction.Tree.default().text)
+    assert "[Technologies]\n  [Programming languages]\n    Python\n      pandas" in text
+    assert "YOLOv8" in text  # how to map a posting's words onto the tree
+    assert set(ai.schema()["properties"]["requirements"]["items"]["properties"]) == {
+        "name", "importance", "evidence", "min_years", "max_years", "detail"}
 
 
-def _groups(client):
-    return {g["name"]: g for g in client.get("/api/skill-groups").json()}
+def _skills(client):
+    return {s["name"]: s for s in client.get("/api/skills").json()}
 
 
-def test_extracted_skills_are_filed_with_their_parents(client):
-    target(client, text="Requirements\n- pandas and SQL\n- 3+ years of AWS")
-    groups = {g["id"]: g["name"] for g in client.get("/api/skill-groups").json()}
+def test_the_tree_starts_as_designed(client):
+    rows = _skills(client)
+    assert rows["Technologies"]["parent_id"] is None and rows["Technologies"]["placed"]
+    assert rows["YOLO"]["parent_id"] == rows["Object detection"]["id"]
+    assert rows["Object detection"]["parent_id"] == rows["Computer vision"]["id"]
+    assert rows["pandas"]["parent_id"] == rows["Python"]["id"]
+    assert [rows[n]["position"] for n in ("Python", "SQL", "R")] == [0, 1, 2]
+    # In order: the tree's own order, from the top.
+    assert client.get("/api/skills").json()[0]["name"] == "Technologies"
+
+
+def test_postings_count_on_the_tree_and_the_rest_waits_in_unsorted(client):
+    target(client, text="Requirements\n- pandas and SQL\n- 3+ years of AWS\n- Keras")
     gap = client.get("/api/skill-gap").json()
     rows = {s["name"]: s for s in gap["skills"]}
-    assert groups[rows["pandas"]["group_id"]] == "Libraries & frameworks"
-    assert groups[rows["SQL"]["group_id"]] == "Databases & SQL"
+    assert rows["pandas"]["parent_id"] == rows["Python"]["id"] and rows["pandas"]["jobs"] == 1
     assert rows["AWS"]["years"] == ["3+"]
-    python = next(s for s in client.get("/api/skills").json() if s["name"] == "Python")
-    assert rows["pandas"]["parent_id"] == python["id"]
-    assert {g["name"] for g in gap["groups"]} >= {"Technologies", "Soft skills"}
+    # The nodes above, so the chain shows, asked for by nobody themselves.
+    assert rows["Python"]["jobs"] == 0 and rows["Technologies"]["jobs"] == 0
+    # Not in the tree: Unsorted, until the user places it.
+    assert not rows["Keras"]["placed"] and rows["Keras"]["parent_id"] is None
 
 
-def test_editing_the_tree(client):
-    tech = _groups(client)["Technologies"]
-    groups = client.post("/api/skill-groups", json={"name": "Vector search", "parent_id": tech["id"]}).json()
-    new = next(g for g in groups if g["name"] == "Vector search")
-    assert new["position"] == 7  # after the seven starting subgroups
-    client.patch(f"/api/skill-groups/{new['id']}", json={"index": 0})
-    assert _groups(client)["Vector search"]["position"] == 0
-    assert _groups(client)["Programming languages"]["position"] == 1
-    client.patch(f"/api/skill-groups/{new['id']}", json={"name": "Search", "description": "Elasticsearch, vector search"})
-    assert _groups(client)["Search"]["description"] == "Elasticsearch, vector search"
-    # Not inside itself or its own subgroups.
-    assert client.patch(f"/api/skill-groups/{tech['id']}", json={"parent_id": new["id"]}).status_code == 422
+def test_readings_never_change_the_tree(client):
+    before = {(s["name"], s["parent_id"], s["position"], s["placed"]) for s in client.get("/api/skills").json()}
+    target(client)
+    after = {(s["name"], s["parent_id"], s["position"], s["placed"]) for s in client.get("/api/skills").json()}
+    assert before <= after
+    assert all(not placed for _, _, _, placed in after - before)
 
 
-def test_dragging_a_group_into_another_place(client):
-    groups = _groups(client)
-    cloud, know, ml = groups["Cloud & infrastructure"], groups["Knowledge areas"], groups["Machine learning"]
-    client.patch(f"/api/skill-groups/{cloud['id']}", json={"parent_id": know["id"], "index": 1})
-    groups = _groups(client)
-    assert groups["Cloud & infrastructure"]["parent_id"] == know["id"]
-    assert groups["Cloud & infrastructure"]["position"] == 1 and groups["Deep learning"]["position"] == 2
-    assert groups["Machine learning"]["position"] == ml["position"] == 0
-    # The groups it left close the gap.
-    tech = sorted((g for g in groups.values() if g["parent_id"] == groups["Technologies"]["id"]), key=lambda g: g["position"])
-    assert [g["position"] for g in tech] == list(range(6))
+def test_adding_moving_and_reordering_nodes(client):
+    rows = _skills(client)
+    cloud = rows["Cloud"]
+    rows = {s["name"]: s for s in client.post("/api/skills", json={"name": " Oracle Cloud ", "parent_id": cloud["id"]}).json()}
+    assert rows["Oracle Cloud"]["parent_id"] == cloud["id"] and rows["Oracle Cloud"]["position"] == 3
+    client.patch(f"/api/skills/{rows['Oracle Cloud']['id']}", json={"index": 0})
+    rows = _skills(client)
+    assert [rows[n]["position"] for n in ("Oracle Cloud", "AWS", "Azure", "Google Cloud")] == [0, 1, 2, 3]
+    # Dragged under another node; the ones it left close the gap.
+    client.patch(f"/api/skills/{rows['Azure']['id']}", json={"parent_id": rows["Background"]["id"], "index": 1})
+    rows = _skills(client)
+    assert rows["Azure"]["parent_id"] == rows["Background"]["id"] and rows["Azure"]["position"] == 1
+    assert rows["Education"]["position"] == 2 and rows["Google Cloud"]["position"] == 2
     # Out to the top level, at the end.
-    client.patch(f"/api/skill-groups/{cloud['id']}", json={"parent_id": None})
-    groups = _groups(client)
-    assert groups["Cloud & infrastructure"]["parent_id"] is None
-    assert groups["Cloud & infrastructure"]["position"] == max(g["position"] for g in groups.values() if g["parent_id"] is None)
-
-
-def test_deleting_a_group_moves_its_skills_and_subgroups_up(client):
-    target(client, text="Requirements\n- Docker")
-    groups = _groups(client)
-    cloud, tech = groups["Cloud & infrastructure"], groups["Technologies"]
-    client.post("/api/skill-groups", json={"name": "Containers", "parent_id": cloud["id"]})
-    client.delete(f"/api/skill-groups/{cloud['id']}")
-    groups = _groups(client)
-    assert "Cloud & infrastructure" not in groups and groups["Containers"]["parent_id"] == tech["id"]
-    docker = next(s for s in client.get("/api/skill-gap").json()["skills"] if s["name"] == "Docker")
-    assert docker["group_id"] == tech["id"]
-
-
-def test_a_skill_the_user_moves_stays_there(client):
-    job, _ = target(client, text="Requirements\n- Docker")
-    soft = _groups(client)["Soft skills"]
-    docker = next(s for s in client.get("/api/skill-gap").json()["skills"] if s["name"] == "Docker")
-    detail = client.patch(f"/api/skills/{docker['id']}", json={"group_id": soft["id"]}).json()
-    assert detail["group_locked"] is True
-    client.post(f"/api/jobs/{job['id']}/extract")
-    docker = next(s for s in client.get("/api/skill-gap").json()["skills"] if s["name"] == "Docker")
-    assert docker["group_id"] == soft["id"]
+    client.patch(f"/api/skills/{rows['Azure']['id']}", json={"parent_id": None})
+    rows = _skills(client)
+    assert rows["Azure"]["parent_id"] is None and rows["Azure"]["position"] == 4
+    client.patch(f"/api/skills/{rows['Azure']['id']}", json={"description": "Microsoft's cloud"})
+    assert _skills(client)["Azure"]["description"] == "Microsoft's cloud"
 
 
 def test_a_skill_cant_be_under_its_own_child(client):
-    target(client, text="Requirements\n- pandas")
-    by_name = {s["name"]: s for s in client.get("/api/skills").json()}
-    pandas, python = by_name["pandas"], by_name["Python"]
-    assert pandas["parent_id"] == python["id"]
+    rows = _skills(client)
+    pandas, python = rows["pandas"], rows["Python"]
     assert client.patch(f"/api/skills/{python['id']}", json={"parent_id": pandas["id"]}).status_code == 422
+    assert client.patch(f"/api/skills/{python['id']}", json={"parent_id": python["id"]}).status_code == 422
 
 
-def test_old_skills_are_filed_on_upgrade(tmp_path):
-    from jobpilot.models import Skill
+def test_placing_a_skill_from_unsorted_and_back(client):
+    job, _ = target(client, text="Requirements\n- Keras")
+    rows = _skills(client)
+    client.patch(f"/api/skills/{rows['Keras']['id']}", json={"parent_id": rows["Python"]["id"]})
+    rows = _skills(client)
+    assert rows["Keras"]["placed"] and rows["Keras"]["parent_id"] == rows["Python"]["id"]
+    assert rows["Keras"]["position"] == 5  # after the five libraries already there
+    # Reading the posting again leaves it where the user put it.
+    client.post(f"/api/jobs/{job['id']}/extract")
+    assert _skills(client)["Keras"]["parent_id"] == rows["Python"]["id"]
+    # Back to Unsorted: its children take its place.
+    client.patch(f"/api/skills/{rows['Python']['id']}", json={"placed": False})
+    rows = _skills(client)
+    assert not rows["Python"]["placed"] and rows["pandas"]["parent_id"] == rows["Programming languages"]["id"]
+    assert [rows[n]["position"] for n in ("pandas", "NumPy", "SQL")] == [0, 1, 6]
 
-    app = create_app(tmp_path / "t.db", inline_extraction=True)
-    with app.state.sessionmaker() as session:
-        session.add_all([Skill(name="pandas", key="pandas", category="framework"),
-                         Skill(name="Ranking", key="ranking", category="concept")])
-        session.commit()
-        extraction.refile(session, extraction.Tree.load(session))
-        session.commit()
+
+def test_removing_a_skill_takes_it_off_its_jobs_for_good(client):
+    job, _ = target(client, text="Requirements\n- Python and pandas")
+    rows = _skills(client)
+    rows = {s["name"]: s for s in client.delete(f"/api/skills/{rows['Python']['id']}").json()}
+    assert rows["Python"]["jobs"] == 0 and not rows["Python"]["placed"]
+    assert rows["pandas"]["parent_id"] == rows["Programming languages"]["id"]  # moved up
+    assert "Python" not in {r["name"] for r in client.get(f"/api/jobs/{job['id']}").json()["requirements"]}
+    # Reading the posting again doesn't bring it back.
+    client.post(f"/api/jobs/{job['id']}/extract")
+    assert "Python" not in {r["name"] for r in client.get(f"/api/jobs/{job['id']}").json()["requirements"]}
+    # A node no posting asks for is just gone.
+    assert "Finance" not in {s["name"] for s in client.delete(f"/api/skills/{rows['Finance']['id']}").json()}
+
+
+def test_the_model_sees_the_users_tree(client):
+    rows = _skills(client)
+    client.post("/api/skills", json={"name": "Elasticsearch", "parent_id": rows["Databases"]["id"]})
+    with client.app.state.sessionmaker() as session:
         tree = extraction.Tree.load(session)
-        pandas = session.scalar(select(Skill).where(Skill.key == "pandas"))
-        ranking = session.scalar(select(Skill).where(Skill.key == "ranking"))
-        assert pandas.group_id == tree.id_of_key["tech.libraries"] and pandas.parent.name == "Python"
-        assert ranking.group_id is None  # its old kind was the model's guess; the next reading files it
+    assert "  [Databases]\n" in tree.text and "    Elasticsearch" in tree.text
+    assert skills.skill_key("Elasticsearch") in tree.keys and skills.skill_key("Databases") not in tree.keys
+
+
+def test_upgrading_keeps_skills_and_their_postings(tmp_path):
+    """An old database: the skills it had keep their id in the tree, the rest wait in Unsorted."""
+    import sqlite3
+    from alembic import command
+    from alembic.config import Config
+    from pathlib import Path
+    import jobpilot
+
+    db = tmp_path / "old.db"
+    cfg = Config()
+    cfg.set_main_option("script_location", str(Path(jobpilot.__file__).parent / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db}")
+    command.upgrade(cfg, "f2a6c8e1b4d9")
+    con = sqlite3.connect(db)
+    con.execute("INSERT INTO skill (id, name, key, category, plan_note, created_at, group_locked, description, old_keys) "
+                "VALUES (7, 'PyTorch', 'pytorch', 'tech', '', '2026-01-01', 1, '', ''), "
+                "(8, 'Ranking', 'ranking', 'tech', '', '2026-01-01', 0, '', '')")
+    con.commit()
+    command.upgrade(cfg, "head")
+    rows = {r[0]: r[1:] for r in con.execute(
+        "SELECT s.name, s.id, s.placed, p.name FROM skill s LEFT JOIN skill p ON p.id = s.parent_id")}
+    assert rows["PyTorch"] == (7, 1, "Python")
+    assert rows["Ranking"] == (8, 0, None)
+    assert rows["YOLO"][1:] == (1, "Object detection")
 
 
 class ChattyModel(ai.Provider):
@@ -735,57 +780,21 @@ class ChattyModel(ai.Provider):
 
 
 def test_recommendation_chat_sends_the_whole_tree(client, monkeypatch):
-    target(client, text="Requirements\n- pandas\n- Docker")
+    target(client, text="Requirements\n- pandas\n- Keras")
     model = ChattyModel({})
     monkeypatch.setattr(ai.Settings, "provider", lambda self, name=None, overrides=None: model)
     res = client.post("/api/ai/chat", json={"messages": [{"role": "user", "content": "Recommend changes"}]})
     assert res.json() == {"reply": "Move Docker to Cloud & infrastructure.", "used": "Ollama"}
     system, messages = model.seen
-    assert "[Technologies]" in system and "[Soft skills]" in system
-    assert "- Python (in 0 jobs)" not in system  # only skills jobs ask for
-    # pandas once, in its own group, pointing at Python, not again under Python.
-    assert system.count("- pandas") == 1 and "- pandas (in 1 job, belongs to Python)" in system
-    assert "- Docker (in 1 job)" in system
+    assert "- [Technologies] (group)" in system and "- [Soft skills] (group)" in system
+    assert "    - Python (in 0 jobs)\n      - pandas (in 1 job)" in system and "- Machine learning (in 0 jobs)" in system
+    assert "Unsorted" in system and "  - Keras (in 1 job)" in system
     assert messages == [{"role": "user", "content": "Recommend changes"}]
 
 
 def test_the_dictionary_cant_chat(client):
     res = client.post("/api/ai/chat", json={"provider": "none", "messages": [{"role": "user", "content": "hi"}]})
     assert res.status_code == 422
-
-
-def test_skills_are_items_in_the_tree(client):
-    target(client, text="Requirements\n- Python and pandas")
-    langs = _groups(client)["Programming languages"]
-    skills = {s["name"]: s for s in client.get("/api/skills").json()}
-    assert skills["Python"]["jobs"] == 1 and skills["Python"]["group_id"] == langs["id"]
-    # Added by hand: next to Python, at the same level.
-    skills = {s["name"]: s for s in client.post("/api/skills", json={"name": " Go ", "group_id": langs["id"]}).json()}
-    assert skills["Go"]["group_id"] == langs["id"] and skills["Go"]["placed"] and skills["Go"]["jobs"] == 0
-    # Dragged under another skill.
-    client.patch(f"/api/skills/{skills['pandas']['id']}", json={"group_id": langs["id"], "parent_id": skills["Go"]["id"]})
-    assert next(s for s in client.get("/api/skills").json() if s["name"] == "pandas")["parent_id"] == skills["Go"]["id"]
-    assert "Go" not in {s["name"] for s in client.delete(f"/api/skills/{skills['Go']['id']}").json()}
-
-
-def test_removing_a_skill_takes_it_off_its_jobs_for_good(client):
-    job, _ = target(client, text="Requirements\n- Python and pandas")
-    python = next(s for s in client.get("/api/skills").json() if s["name"] == "Python")
-    rows = {s["name"]: s for s in client.delete(f"/api/skills/{python['id']}").json()}
-    assert rows["Python"]["jobs"] == 0 and not rows["Python"]["placed"] and rows["Python"]["group_id"] is None
-    assert rows["pandas"]["parent_id"] is None
-    assert "Python" not in {r["name"] for r in client.get(f"/api/jobs/{job['id']}").json()["requirements"]}
-    # Reading the posting again doesn't bring it back.
-    client.post(f"/api/jobs/{job['id']}/extract")
-    assert "Python" not in {r["name"] for r in client.get(f"/api/jobs/{job['id']}").json()["requirements"]}
-
-
-def test_the_model_learns_a_group_from_its_skills(client):
-    search = next(g for g in client.post("/api/skill-groups", json={"name": "Search"}).json() if g["name"] == "Search")
-    client.post("/api/skills", json={"name": "Elasticsearch", "group_id": search["id"]})
-    with client.app.state.sessionmaker() as session:
-        tree = extraction.Tree.load(session)
-    assert next(g for g in tree.groups if g.path == "Search").description == "Includes: Elasticsearch"
 
 
 def test_renaming_a_skill_keeps_finding_it_under_the_old_name(client):
@@ -801,3 +810,57 @@ def test_renaming_a_skill_keeps_finding_it_under_the_old_name(client):
     assert {r["name"] for r in client.get(f"/api/jobs/{other['id']}").json()["requirements"]} == {"Torch"}
     # Two skills can't share a name.
     assert client.patch(f"/api/skills/{torch['id']}", json={"name": "sql"}).status_code == 409
+
+
+def test_the_gap_says_which_postings_ask_for_each_skill(client):
+    first, group = target(client, text="Requirements\n- Python and SQL")
+    second, _ = target(client, title="ML Engineer", text="Requirements\n- Python")
+    gap = client.get(f"/api/skill-gap?group_id={group}").json()
+    rows = {s["name"]: s for s in gap["skills"]}
+    assert sorted(rows["Python"]["job_ids"]) == sorted([first["id"], second["id"]])
+    assert rows["SQL"]["job_ids"] == [first["id"]]
+    assert {p["title"] for p in gap["postings"]} == {"AI Engineer", "ML Engineer"}
+
+
+def test_the_gap_says_which_postings_ask_for_each_skill(client):
+    first, group = target(client, text="Requirements\n- Python and SQL")
+    second, _ = target(client, title="ML Engineer", text="Requirements\n- Python")
+    gap = client.get(f"/api/skill-gap?group_id={group}").json()
+    rows = {s["name"]: s for s in gap["skills"]}
+    assert sorted(rows["Python"]["job_ids"]) == sorted([first["id"], second["id"]])
+    assert rows["SQL"]["job_ids"] == [first["id"]]
+    assert {p["title"] for p in gap["postings"]} == {"AI Engineer", "ML Engineer"}
+
+
+def test_specific_models_and_techniques_are_found():
+    found = {f.name: f for f in skills.find(
+        "Requirements\n- BERT or other transformers for NLP\n- YOLOv8 for object detection\n"
+        "- Customer segmentation and regression testing\n- Linear regression")}
+    assert {"BERT", "Transformers", "NLP", "YOLO", "Object detection", "Regression"} <= set(found)
+    assert "Image segmentation" not in found  # customer segmentation is marketing
+
+
+def test_large_language_models_are_llms_not_language_models():
+    found = {f.name for f in skills.find("Requirements\n- Large language models and generative AI")}
+    assert {"LLMs", "Generative AI"} <= found and "Language models" not in found
+
+
+def test_adding_a_group_that_is_never_asked_for(client):
+    rows = _skills(client)
+    assert rows["Cloud"]["is_group"] and not rows["Machine learning"]["is_group"]
+    rows = {s["name"]: s for s in client.post("/api/skills", json={
+        "name": "Search", "parent_id": rows["Technologies"]["id"], "is_group": True, "description": "Search engines"}).json()}
+    assert rows["Search"]["is_group"] and rows["Search"]["description"] == "Search engines"
+    client.post("/api/skills", json={"name": "Elasticsearch", "parent_id": rows["Search"]["id"]})
+    # A group can't take the name of a skill.
+    assert client.post("/api/skills", json={"name": "python", "is_group": True}).status_code == 409
+    # A posting that names the group counts on what is in it, never on the group.
+    job, _ = target(client, text="Requirements\n- Elasticsearch")
+    with client.app.state.sessionmaker() as session:
+        result = extraction.Result([extraction.Item("Search", Importance.MUST, "search", "model"),
+                                    extraction.Item("Cloud", Importance.MUST, "cloud", "model")], "test")
+        extraction.save(session, session.get(extraction.Job, job["id"]), result)
+        session.commit()
+    assert client.get(f"/api/jobs/{job['id']}").json()["requirements"] == []
+    gap = {s["name"]: s for s in client.get("/api/skill-gap").json()["skills"]}
+    assert gap["Search"]["jobs"] == 0 and gap["Cloud"]["jobs"] == 0

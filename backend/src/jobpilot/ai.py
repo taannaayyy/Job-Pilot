@@ -42,42 +42,19 @@ class AIError(Exception):
 
 @dataclass(frozen=True)
 class ModelItem:
-    name: str
-    group: str  # a path from the tree, "Technologies › Cloud & infrastructure"
+    name: str  # a skill of the tree, written as in the tree, or the posting's own name for it
     importance: Importance
     evidence: str
-    parent: str = ""
     min_years: int | None = None
     max_years: int | None = None
     detail: str = ""
-
-
-@dataclass(frozen=True)
-class Group:
-    path: str
-    description: str
-
-
-SEP = " › "
-
-
-def default_tree() -> list[Group]:
-    """The starting tree, for when there is no database (tests, the tune tool on a text file)."""
-    names = {}
-    groups = []
-    keys_with_children = {parent for _, _, _, parent, _ in taxonomy.flatten() if parent}
-    for key, name, description, parent, _ in taxonomy.flatten():
-        names[key] = (names[parent] + SEP if parent else "") + name
-        if key not in keys_with_children:
-            groups.append(Group(names[key], description))
-    return groups
 
 
 def _nullable_int():
     return {"anyOf": [{"type": "integer"}, {"type": "null"}]}
 
 
-def schema(tree: list[Group]) -> dict:
+def schema() -> dict:
     return {
         "type": "object",
         "properties": {
@@ -87,15 +64,13 @@ def schema(tree: list[Group]) -> dict:
                     "type": "object",
                     "properties": {
                         "name": {"type": "string"},
-                        "group": {"type": "string", "enum": [g.path for g in tree]},
                         "importance": {"type": "string", "enum": ["must", "nice"]},
                         "evidence": {"type": "string"},
-                        "parent": {"type": "string"},
                         "min_years": _nullable_int(),
                         "max_years": _nullable_int(),
                         "detail": {"type": "string"},
                     },
-                    "required": ["name", "group", "importance", "evidence", "parent", "min_years", "max_years", "detail"],
+                    "required": ["name", "importance", "evidence", "min_years", "max_years", "detail"],
                     "additionalProperties": False,
                 },
             }
@@ -105,19 +80,20 @@ def schema(tree: list[Group]) -> dict:
     }
 
 
-SCHEMA = schema(default_tree())
+SCHEMA = schema()
 
 # The rules; the user's tree is put in front of them (prompt()).
 RULES = """Rules:
 - One item per skill or technology: "PyTorch and Hugging Face" is two items.
-- name: the skill itself in 1 to 4 words, in the posting's words ("PyTorch", "RAG", "Model training").
-  Never a sentence, never "Experience with ...".
-- group: what the item is, not how the posting words it. "Hands-on experience with model training" is
-  Model training in machine learning; "strong analytical thinking" is a soft skill.
-- parent: the technology it belongs to, if any (pandas: Python, SageMaker: AWS, pgvector: Vector databases); else "".
+- name: when the item is one of the skills in the tree, its name exactly as the tree writes it, even when the
+  posting words it differently. [Bracketed] names are groups that only organize the tree: never an item.
+  Examples: "YOLOv8" is YOLO, "relational databases" is Relational (SQL), "deep neural
+  networks" is Deep learning. Be as specific as the posting is: "YOLO experience" is YOLO, not Computer vision;
+  "computer vision" alone is Computer vision. Only when no skill in the tree is that item: the skill itself in
+  1 to 4 words, in the posting's words ("Feast", "Model documentation"). Never a sentence, never
+  "Experience with ...".
 - min_years, max_years: the years asked for this item ("3-5 years of Python": 3 and 5 on Python; "2+ years
-  with SQL": 2 and null on SQL). Years not about one skill: an item "Professional experience" in the experience
-  group. Otherwise null.
+  with SQL": 2 and null on SQL). Years not about one skill: an item "Professional experience". Otherwise null.
 - importance: "nice" when the posting says plus, nice to have, preferred, bonus or advantage, or lists it apart
   from the main requirements (for example after the duties); otherwise "must".
 - Degrees: one item per degree level ("Bachelor's degree", "Master's degree", "PhD") with the accepted fields of
@@ -129,11 +105,10 @@ RULES = """Rules:
 """
 
 
-def prompt(tree: list[Group]) -> str:
-    groups = "\n".join(f"- {g.path}: {g.description}" if g.description else f"- {g.path}" for g in tree)
+def prompt(tree: str) -> str:
     return (
         "List everything this job posting asks of a candidate.\n\n"
-        f"File every item in exactly one of these groups (write the group exactly as shown):\n{groups}\n\n"
+        f"The user's skill tree (two spaces of indent are one level deeper):\n{tree.strip()}\n\n"
         f"{RULES}\nJob posting:\n"
     )
 
@@ -142,24 +117,19 @@ def _int(value) -> int | None:
     return value if isinstance(value, int) and 0 < value <= 30 else None
 
 
-def _parse(text: str, tree: list[Group] | None = None) -> list[ModelItem]:
+def _parse(text: str) -> list[ModelItem]:
     try:
         data = json.loads(text)
     except ValueError as e:
         raise AIError("The model didn't answer in the expected format. Try another model.") from e
-    paths = {g.path for g in tree} if tree else None
     items = []
     for raw in data.get("requirements", []) if isinstance(data, dict) else []:
         if not isinstance(raw, dict) or not str(raw.get("name", "")).strip():
             continue
-        group = str(raw.get("group") or "")
-        if paths is not None and group not in paths:
-            group = ""  # the app files it as unsorted; the user can move it
         importance = Importance.NICE if raw.get("importance") == "nice" else Importance.MUST
         items.append(ModelItem(
-            str(raw["name"]).strip()[:200], group, importance, str(raw.get("evidence") or "")[:300],
-            str(raw.get("parent") or "").strip()[:200], _int(raw.get("min_years")), _int(raw.get("max_years")),
-            str(raw.get("detail") or "").strip()[:300],
+            str(raw["name"]).strip()[:200], importance, str(raw.get("evidence") or "")[:300],
+            _int(raw.get("min_years")), _int(raw.get("max_years")), str(raw.get("detail") or "").strip()[:300],
         ))
     return items
 
@@ -201,7 +171,7 @@ class Provider:
     def describe(self) -> str:
         return LABELS[self.name] + (f" {self.model}" if self.model else "")
 
-    def extract(self, text: str, tree: list[Group] | None = None) -> list[ModelItem]:
+    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
         return []
 
     def chat(self, system: str, messages: list[dict]) -> str:
@@ -256,9 +226,8 @@ class Ollama(Provider):
             raise AIError("Ollama isn't running. Open the Ollama app, or choose another model.") from e
         return res.get("message", {}).get("content", "")
 
-    def extract(self, text: str, tree: list[Group] | None = None) -> list[ModelItem]:
-        tree = tree or default_tree()
-        return _parse(self._chat([{"role": "user", "content": prompt(tree) + text}], schema(tree)), tree)
+    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
+        return _parse(self._chat([{"role": "user", "content": prompt(tree) + text}], schema()))
 
     def chat(self, system: str, messages: list[dict]) -> str:
         return self._chat([{"role": "system", "content": system}, *messages])
@@ -303,11 +272,10 @@ class OpenAICompatible(Provider):
         except (KeyError, IndexError, TypeError) as e:
             raise AIError("The model sent an unexpected answer.") from e
 
-    def extract(self, text: str, tree: list[Group] | None = None) -> list[ModelItem]:
+    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
         if not self.model:
             raise AIError("Choose a model in the AI settings.")
-        tree = tree or default_tree()
-        request, json_schema = prompt(tree), schema(tree)
+        request, json_schema = prompt(tree), schema()
         messages = [{"role": "user", "content": request + text}]
         body = {
             "model": self.model,
@@ -329,7 +297,7 @@ class OpenAICompatible(Provider):
         except OSError as e:
             raise AIError(f"Couldn't reach {self.base}") from e
         try:
-            return _parse(res["choices"][0]["message"]["content"] or "", tree)
+            return _parse(res["choices"][0]["message"]["content"] or "")
         except (KeyError, IndexError, TypeError) as e:
             raise AIError("The model sent an unexpected answer.") from e
 
@@ -355,12 +323,11 @@ class Claude(Provider):
     def chat(self, system: str, messages: list[dict]) -> str:
         return self._create(system=system, messages=messages)
 
-    def extract(self, text: str, tree: list[Group] | None = None) -> list[ModelItem]:
-        tree = tree or default_tree()
+    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
         return _parse(self._create(
             messages=[{"role": "user", "content": prompt(tree) + text}],
-            output_config={"format": {"type": "json_schema", "schema": schema(tree)}},
-        ), tree)
+            output_config={"format": {"type": "json_schema", "schema": schema()}},
+        ))
 
     def _create(self, **kwargs) -> str:
         try:
@@ -435,12 +402,11 @@ class ClaudeCode(Provider):
         self.binary()  # says so when it isn't installed
         return [m for m, _ in CLAUDE_CODE_MODELS]
 
-    def extract(self, text: str, tree: list[Group] | None = None) -> list[ModelItem]:
-        tree = tree or default_tree()
-        out = self._run(prompt(tree) + text, SYSTEM, schema(tree))
+    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
+        out = self._run(prompt(tree) + text, SYSTEM, schema())
         if isinstance(out.get("structured_output"), dict):
-            return _parse(json.dumps(out["structured_output"]), tree)
-        return _parse(str(out.get("result") or ""), tree)
+            return _parse(json.dumps(out["structured_output"]))
+        return _parse(str(out.get("result") or ""))
 
     def chat(self, system: str, messages: list[dict]) -> str:
         """Claude Code runs one prompt at a time, so the conversation so far is sent each time."""

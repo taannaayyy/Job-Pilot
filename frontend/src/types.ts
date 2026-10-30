@@ -103,26 +103,10 @@ export const SKILL_MARK_LABELS: Record<SkillMark, string> = {
   ignore: "Ignore",
 };
 
-export const SKILL_CATEGORY_LABELS: Record<string, string> = {
-  language: "Language",
-  framework: "Framework",
-  tool: "Tool",
-  cloud: "Cloud",
-  database: "Database",
-  concept: "Concept",
-  practice: "Practice",
-  experience: "Experience",
-  education: "Education",
-  spoken_language: "Spoken language",
-  soft_skill: "Soft skill",
-  other: "Other",
-};
-
 export interface Requirement {
   id: number;
   skill_id: number;
   name: string;
-  category: string;
   importance: Importance;
   evidence: string | null;
   /** "dictionary", "model" or "user" */
@@ -134,31 +118,24 @@ export interface Requirement {
   detail: string | null;
 }
 
-/** A node of the tree requirements are filed in. */
-export interface SkillGroupNode {
-  id: number;
-  /** Set for groups of the starting tree. */
-  key: string | null;
-  name: string;
-  description: string;
-  parent_id: number | null;
-  position: number;
-  skill_count: number;
-}
-
 export interface RoleGroup {
   id: number;
   name: string;
   job_count: number;
 }
 
+/** A node of the skill tree (a skill, or a group that only organizes), or a skill waiting in Unsorted. */
 export interface SkillRow {
   id: number;
   name: string;
-  category: string;
-  group_id: number | null;
-  /** The skill it belongs to: pandas to Python. */
+  /** The node it sits under; null at the top level (or in Unsorted). */
   parent_id: number | null;
+  /** Among its siblings. */
+  position: number;
+  /** In the tree; the others wait in Unsorted. */
+  placed: boolean;
+  /** Only organizes ("Cloud"); never asked for itself. */
+  is_group: boolean;
   mark: SkillMark | null;
   plan_note: string;
   jobs: number;
@@ -168,10 +145,10 @@ export interface SkillRow {
   years: string[];
   /** Degrees: accepted fields of study. */
   details: string[];
-  /** Placed or added by the user: in the tree even when no target asks for it. */
-  placed: boolean;
   /** What it means, in the user's words. */
   description: string;
+  /** The target postings that ask for it (on Skill Gap). */
+  job_ids?: number[];
 }
 
 export interface SkillGap {
@@ -183,18 +160,16 @@ export interface SkillGap {
   /** 0..1; null when there is nothing to cover yet. */
   coverage: number | null;
   skills: SkillRow[];
-  groups: SkillGroupNode[];
+  /** The target postings the counts are out of. */
+  postings: { id: number; title: string; company: string }[];
 }
 
 export interface SkillDetail {
   id: number;
   name: string;
   description: string;
-  category: string;
-  group_id: number | null;
   parent_id: number | null;
-  /** The user placed it; reading postings again won't move it. */
-  group_locked: boolean;
+  placed: boolean;
   mark: SkillMark | null;
   plan_note: string;
   jobs: {

@@ -6,10 +6,10 @@ is on: strong models read context the rules can't ("these lines after the duties
 small local ones judge it worse. Models only add skills the dictionary doesn't know, and only ones
 the posting actually names, so a task ("Monitor model performance") doesn't become a skill.
 
-Every requirement is filed in the user's tree (SkillGroup): the dictionary's skills where the
-dictionary says, the model's in the group the model picked from the tree, unless the user moved
-the skill. Years go on the skill they're about. Runs one job at a time in a background thread,
-because a model can take a minute per posting."""
+The tree is the user's (taxonomy.py, then Edit tree) and readings never change it. The model sees
+it and writes a posting's skill the way the tree names it ("YOLOv8" is YOLO); a skill the tree
+doesn't have is saved in Unsorted, for the user to place. Years go on the skill they're about.
+Runs one job at a time in a background thread, because a model can take a minute per posting."""
 
 import logging
 import queue
@@ -24,11 +24,13 @@ from jobpilot import ai, skills, taxonomy
 from jobpilot.ai import AIError, Provider, Settings
 from jobpilot.db import utcnow
 from jobpilot.linkedin import fold
-from jobpilot.models import ExtractionStatus, Importance, Job, Requirement, Skill, SkillGroup
+from jobpilot.models import ExtractionStatus, Importance, Job, Requirement, Skill
 
 log = logging.getLogger(__name__)
 
 MAX_NAME_WORDS = 4
+# Degrees come from the dictionary's rules (which one is required, which a plus).
+_DEGREE = re.compile(r"degree|bachelor|master'?s|ph\.?d|\bb\.?sc?\b|\bm\.?sc?\b|diploma", re.IGNORECASE)
 # One word too general to be a skill to learn: "Automation", "Analysis".
 _GENERIC = {
     "automation", "analysis", "analytics", "data", "models", "modeling", "modelling", "insights", "solutions",
@@ -83,10 +85,6 @@ class Item:
     importance: Importance
     evidence: str
     source: str  # "dictionary" or "model"
-    # Where it goes: a starting-tree key (the dictionary's) or a tree path (the model's).
-    group_key: str | None = None
-    group_path: str | None = None
-    parent: str | None = None
     min_years: int | None = None
     max_years: int | None = None
     detail: str | None = None
@@ -102,48 +100,31 @@ class Result:
 
 @dataclass
 class Tree:
-    """The user's tree as the model sees it (leaf groups by path), and how to find each group."""
+    """The user's tree as the model sees it (indented names, [groups] in brackets), and the keys of
+    its skills (groups are never asked for)."""
 
-    groups: list[ai.Group]
-    key_of_path: dict[str, str | None] = field(default_factory=dict)
-    id_of_path: dict[str, int] = field(default_factory=dict)
-    id_of_key: dict[str, int] = field(default_factory=dict)
+    text: str
+    keys: set[str] = field(default_factory=set)
 
     @classmethod
     def default(cls) -> "Tree":
-        groups = ai.default_tree()
-        paths = {}
-        for key, name, _, parent, _ in taxonomy.flatten():
-            paths[key] = (paths[parent] + ai.SEP if parent else "") + name
-        return cls(groups, {path: key for key, path in paths.items()})
+        return cls(taxonomy.TREE, {skills.skill_key(name) for name, _, _, group in taxonomy.nodes() if not group})
 
     @classmethod
     def load(cls, session: Session) -> "Tree":
-        rows = session.scalars(select(SkillGroup).order_by(SkillGroup.position, SkillGroup.id)).all()
-        by_id = {g.id: g for g in rows}
-        with_children = {g.parent_id for g in rows if g.parent_id}
+        placed = session.scalars(select(Skill).where(Skill.placed.is_(True)).order_by(Skill.position, Skill.id)).all()
+        children: dict[int | None, list[Skill]] = {}
+        for s in placed:
+            children.setdefault(s.parent_id, []).append(s)
+        lines: list[str] = []
 
-        def path(g: SkillGroup) -> str:
-            return (path(by_id[g.parent_id]) + ai.SEP if g.parent_id in by_id else "") + g.name
+        def walk(parent_id: int | None, depth: int) -> None:
+            for s in children.get(parent_id, []):
+                lines.append("  " * depth + (f"[{s.name}]" if s.is_group else s.name))
+                walk(s.id, depth + 1)
 
-        # What is already filed in a group tells the model what belongs there.
-        filed: dict[int, list[str]] = {}
-        for name, group_id in session.execute(select(Skill.name, Skill.group_id).where(Skill.group_id.is_not(None))):
-            filed.setdefault(group_id, []).append(name)
-
-        def describe(g: SkillGroup) -> str:
-            names = sorted(filed.get(g.id, []), key=str.casefold)[:20]
-            return "; ".join(x for x in (g.description, "Includes: " + ", ".join(names) if names else "") if x)
-
-        tree = cls([])
-        for g in sorted(rows, key=lambda g: path(g).casefold()):
-            p = path(g)
-            tree.key_of_path[p], tree.id_of_path[p] = g.key, g.id
-            if g.key:
-                tree.id_of_key[g.key] = g.id
-            if g.id not in with_children:
-                tree.groups.append(ai.Group(p, describe(g)))
-        return tree
+        walk(None, 0)
+        return cls("\n".join(lines), {s.key for s in placed if not s.is_group})
 
 
 _OVERALL_KEY = skills.skill_key(taxonomy.OVERALL_EXPERIENCE)
@@ -170,14 +151,14 @@ def extract(text: str, provider: Provider, trace: list[str] | None = None, tree:
         return f" [{m.min_years}{'-' + str(m.max_years) if m.max_years else '+'} yrs]" if m.min_years else ""
 
     for f in skills.find(text):
-        put(Item(f.name, f.importance, f.evidence, "dictionary", group_key=f.group, parent=f.parent,
-                 min_years=f.min_years, max_years=f.max_years, detail=f.detail))
-        note(f"dictionary  {f.importance:4}  {f.name}{years(f)}  ({f.group})  <- {f.evidence[:80]!r}")
+        put(Item(f.name, f.importance, f.evidence, "dictionary", min_years=f.min_years, max_years=f.max_years,
+                 detail=f.detail))
+        note(f"dictionary  {f.importance:4}  {f.name}{years(f)}  <- {f.evidence[:80]!r}")
 
     used, warning = "Dictionary", None
     if provider.name != "none":
         try:
-            model_items = provider.extract(text, tree.groups)
+            model_items = provider.extract(text, tree.text)
             used = f"Dictionary + {provider.describe()}"
         except AIError as e:
             model_items, warning = [], str(e)
@@ -185,49 +166,53 @@ def extract(text: str, provider: Provider, trace: list[str] | None = None, tree:
         text_words = set(_words(text))
         model_says: dict[str, Importance] = {}  # dictionary skills the model named, and how
         for m in model_items:
-            group_key = tree.key_of_path.get(m.group)
-            note(f"model said  {m.importance:4}  {m.name!r}{years(m)} in {m.group or '?'}"
-                 f"{' under ' + m.parent if m.parent else ''}  <- {m.evidence[:80]!r}")
+            note(f"model said  {m.importance:4}  {m.name!r}{years(m)}  <- {m.evidence[:80]!r}")
             # "Professional experience, 3+ years": overall years, which the dictionary may have too.
-            if m.min_years and (group_key == "experience" or "experience" in fold(m.name)) and not skills.find(m.name):
+            if m.min_years and "experience" in fold(m.name) and not skills.find(m.name):
                 current = found.get(_OVERALL_KEY)
                 if current is None:
-                    put(Item(taxonomy.OVERALL_EXPERIENCE, m.importance, m.evidence, "model", group_key="experience",
+                    put(Item(taxonomy.OVERALL_EXPERIENCE, m.importance, m.evidence, "model",
                              min_years=m.min_years, max_years=m.max_years))
                     note("   overall experience: added")
                 elif current.min_years is None:
                     current.min_years, current.max_years = m.min_years, m.max_years
                 continue
-            for name in _parts(re.sub(r"\s+", " ", m.name)):
-                # A skill the dictionary knows ("torch", "BSc") was found by the dictionary
-                # already, or isn't in the posting; the model can only add years and judgement.
-                known = [skills.lookup(name)] if skills.lookup(name) else [(f.name, f.group) for f in skills.find(name)]
-                if known:
-                    for known_name, group in known:
+            name = re.sub(r"\s+", " ", m.name)
+            # A skill of the tree, as the tree writes it ("Data structures and algorithms"): kept whole.
+            for name in [name] if skills.skill_key(name) in tree.keys else _parts(name):
+                in_tree = skills.skill_key(name) in tree.keys
+                known_name = skills.lookup(name)
+                known = [known_name] if known_name else [] if in_tree else [f.name for f in skills.find(name)]
+                # The model may map the posting's words onto a skill of the tree ("deep neural networks"
+                # is Deep learning) when the words it quotes are in the posting.
+                mapped = in_tree and _grounded(m.evidence, text_words)
+                if known and (not mapped or skills.skill_key(known[0]) in found):
+                    # A skill the dictionary knows ("torch", "BSc") was found by the dictionary
+                    # already, or isn't in the posting; the model can only add years and judgement.
+                    for known_name in known:
                         key = skills.skill_key(known_name)
-                        if group != "education":  # "BSc or MSc" keeps the degree rule
+                        if known_name not in skills.DEGREES:  # "BSc or MSc" keeps the degree rule
                             model_says[key] = Importance.MUST if Importance.MUST in (model_says.get(key), m.importance) else m.importance
                         if key in found:
                             item = found[key]
                             if item.min_years is None and m.min_years:
                                 item.min_years, item.max_years = m.min_years, m.max_years
-                            if group == "education" and not item.detail and m.detail:
+                            if known_name in skills.DEGREES and not item.detail and m.detail:
                                 item.detail = m.detail
-                    note(f"   {name!r}: the dictionary's {', '.join(k for k, _ in known)}")
+                    note(f"   {name!r}: the dictionary's {', '.join(known)}")
                     continue
-                if group_key == "education":
+                if _DEGREE.search(name):
                     note(f"   {name!r}: dropped, degrees come from the dictionary")
                 elif fold(name) in _GENERIC:
                     note(f"   {name!r}: dropped, too general")
                 elif len(name.split()) > MAX_NAME_WORDS:
                     note(f"   {name!r}: dropped, longer than {MAX_NAME_WORDS} words")
-                elif not _grounded(name, text_words):
+                elif not (mapped if in_tree else _grounded(name, text_words)):
                     note(f"   {name!r}: dropped, not all its words are in the posting")
                 else:
-                    put(Item(name[0].upper() + name[1:], m.importance, m.evidence or name, "model",
-                             group_path=m.group or None, parent=m.parent or None,
+                    put(Item(known_name or name[0].upper() + name[1:], m.importance, m.evidence or name, "model",
                              min_years=m.min_years, max_years=m.max_years, detail=m.detail or None))
-                    note(f"   {name!r}: added")
+                    note(f"   {name!r}: added{' (in the tree)' if in_tree else ''}")
         if provider.model_decides:
             for key, importance in model_says.items():
                 if key in found and found[key].source == "dictionary":
@@ -244,56 +229,28 @@ def find_skill(session: Session, key: str) -> Skill | None:
     )
 
 
-def get_or_create_skill(session: Session, name: str, group_id: int | None = None, group_key: str | None = None) -> Skill:
-    """The skill under its dictionary name; a new one is filed in the given group."""
-    known = skills.lookup(name)
-    name = known[0] if known else name.strip()
+def get_or_create_skill(session: Session, name: str) -> Skill:
+    """The skill under its dictionary name; a new one waits in Unsorted."""
+    name = skills.lookup(name) or name.strip()
     key = skills.skill_key(name)
     skill = find_skill(session, key)
     if skill is None:
-        skill = Skill(name=name, key=key, category=group_key or (known[1] if known else "other"), group_id=group_id)
+        skill = Skill(name=name, key=key)
         session.add(skill)
         session.flush()
     return skill
 
 
-def file_skill(session: Session, skill: Skill, tree: Tree, group_id: int | None, parent: str | None, authoritative: bool) -> None:
-    """Puts a skill in its group and under its parent. What decides, strongest first: the user
-    (who moved it), the dictionary (authoritative), the latest model reading."""
-    if skill.group_locked or (not authoritative and skills.lookup(skill.name)):
-        return
-    if group_id is not None:
-        skill.group_id = group_id
-    if parent and skills.skill_key(parent) != skill.key:
-        known = skills.lookup(parent)
-        existing = find_skill(session, skills.skill_key(known[0] if known else parent))
-        if existing is None and known:  # "Python" for pandas; never invent a parent the model made up
-            existing = get_or_create_skill(session, known[0], tree.id_of_key.get(known[1]), known[1])
-        if existing is not None and existing.id != skill.id:
-            skill.parent_id = existing.id
-
-
-def refile(session: Session, tree: Tree) -> None:
-    """Files skills the dictionary knows where the dictionary says (e.g. after an upgrade that
-    brought the tree), unless the user placed them. Others wait for the next reading: their old
-    flat kind was the model's guess and often wrong ("Data preprocessing" as a tool)."""
-    for skill in session.scalars(select(Skill).where(Skill.group_locked.is_(False))):
-        known = skills.lookup(skill.name)
-        if known:
-            file_skill(session, skill, tree, tree.id_of_key.get(known[1]), skills.PARENTS.get(known[0]), True)
-
-
-def save(session: Session, job: Job, result: Result, tree: Tree | None = None) -> None:
+def save(session: Session, job: Job, result: Result) -> None:
     """Replaces what extraction found before; what the user added, edited or removed stays."""
-    tree = tree or Tree.load(session)
     kept = [r for r in job.requirements if r.source in ("user", "removed")]
     user_skill_ids = {r.skill_id for r in kept}
     job.requirements = kept
     session.flush()
     for item in result.items:
-        group_id = tree.id_of_key.get(item.group_key) if item.group_key else tree.id_of_path.get(item.group_path or "")
-        skill = get_or_create_skill(session, item.name, group_id, item.group_key or tree.key_of_path.get(item.group_path or ""))
-        file_skill(session, skill, tree, group_id, item.parent, item.source == "dictionary")
+        skill = get_or_create_skill(session, item.name)
+        if skill.is_group:  # "Cloud" organizes the tree; a posting asks for what is in it
+            continue
         if skill.id in user_skill_ids:
             continue
         user_skill_ids.add(skill.id)
@@ -318,10 +275,8 @@ class Worker:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        """Files skills into the tree, and picks up jobs left waiting when the app was last closed."""
+        """Picks up jobs left waiting when the app was last closed."""
         with self.sessions() as session:
-            refile(session, Tree.load(session))
-            session.commit()
             waiting = session.scalars(
                 select(Job.id).where(Job.extraction_status.in_([ExtractionStatus.PENDING, ExtractionStatus.RUNNING]))
             ).all()
@@ -372,5 +327,5 @@ class Worker:
             # Cancelled, or the description changed meanwhile (it is queued again then).
             if job is None or job.extraction_status != ExtractionStatus.RUNNING or job.raw_text != text:
                 return
-            save(session, job, result, Tree.load(session))
+            save(session, job, result)
             session.commit()

@@ -169,24 +169,8 @@ class RoleGroup(Base):
     jobs: Mapped[list[Job]] = relationship(back_populates="target_group")
 
 
-class SkillGroup(Base):
-    """A node of the tree requirements are filed in ("Technologies › Cloud & infrastructure").
-    The user can rename, move, add and delete groups."""
-
-    __tablename__ = "skill_group"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    # Set for groups of the starting tree (taxonomy.py), so the dictionary finds them after a rename.
-    key: Mapped[str | None] = mapped_column(String(50), unique=True)
-    name: Mapped[str] = mapped_column(String(100))
-    # Tells the model what belongs here.
-    description: Mapped[str] = mapped_column(Text, default="", server_default="")
-    parent_id: Mapped[int | None] = mapped_column(ForeignKey("skill_group.id", ondelete="CASCADE"), index=True)
-    position: Mapped[int] = mapped_column(default=0, server_default="0")
-
-
 class Skill(Base):
-    """One requirement across all jobs ("PyTorch", "Bachelor's degree"), with the user's own mark."""
+    """A node of the skill tree, and one requirement across all jobs ("PyTorch", "Bachelor's degree")."""
 
     __tablename__ = "skill"
 
@@ -194,13 +178,13 @@ class Skill(Base):
     name: Mapped[str] = mapped_column(String(200))
     # Normalized name; "pytorch" and "PyTorch" are one skill.
     key: Mapped[str] = mapped_column(String(200), unique=True)
-    # The tree group key it was first filed under (kept for reference; group_id is what counts).
-    category: Mapped[str] = mapped_column(String(30))
-    group_id: Mapped[int | None] = mapped_column(ForeignKey("skill_group.id", ondelete="SET NULL"), index=True)
-    # pandas belongs to Python, SageMaker to AWS.
+    # The tree: every node is a skill (Machine learning > Deep learning > Computer vision > YOLO).
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("skill.id", ondelete="SET NULL"))
-    # The user moved it: extraction never files it elsewhere.
-    group_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    position: Mapped[int] = mapped_column(default=0, server_default="0")
+    # In the tree; a skill a posting asks for that isn't waits in Unsorted until the user places it.
+    placed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # Only organizes ("Cloud"): holds skills, is never asked for itself.
+    is_group: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     mark: Mapped[SkillMark | None] = mapped_column(String(10))
     # What the user plans to do about it: a course, a project idea.
     plan_note: Mapped[str] = mapped_column(Text, default="", server_default="")
@@ -211,7 +195,6 @@ class Skill(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     requirements: Mapped[list["Requirement"]] = relationship(back_populates="skill", cascade="all, delete-orphan")
-    group: Mapped[SkillGroup | None] = relationship()
     parent: Mapped["Skill | None"] = relationship(remote_side="Skill.id")
     events: Mapped[list["SkillEvent"]] = relationship(
         back_populates="skill", cascade="all, delete-orphan", order_by="SkillEvent.timestamp"

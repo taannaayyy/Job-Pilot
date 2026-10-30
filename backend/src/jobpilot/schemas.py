@@ -109,7 +109,6 @@ class RequirementOut(BaseModel):
     id: int
     skill_id: int
     name: str
-    category: str
     importance: Importance
     evidence: str | None
     source: str
