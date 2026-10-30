@@ -71,6 +71,7 @@ export default function SkillPanel({ skillId, groupId, onClose, onChanged, onOpe
               <div className="panel-title">
                 <div className="card-company">{skill.group_id ? path(tree, skill.group_id) : "Unsorted"}</div>
                 <h2>{skill.name}</h2>
+                {skill.description && <p className="skill-meaning">{skill.description}</p>}
                 <div className="muted">
                   Asked for in {skill.jobs.length} target{skill.jobs.length === 1 ? "" : "s"}
                 </div>

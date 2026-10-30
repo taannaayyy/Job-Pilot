@@ -110,6 +110,9 @@ class SkillRow(BaseModel):
     # The years the targets ask for ("1+", "3–5"), and accepted fields for degrees.
     years: list[str]
     details: list[str]
+    # Placed or added by the user; shown in the tree even when no target asks for it.
+    placed: bool = False
+    description: str = ""
 
 
 class NodeOut(BaseModel):
@@ -222,6 +225,7 @@ class MarkChange(BaseModel):
 class SkillDetail(BaseModel):
     id: int
     name: str
+    description: str
     category: str
     group_id: int | None
     parent_id: int | None
@@ -239,8 +243,8 @@ def _skill_detail(skill: Skill, group_id: int | None) -> SkillDetail:
         if r.active and r.job.target_group_id is not None and (group_id is None or r.job.target_group_id == group_id)
     ]
     return SkillDetail(
-        id=skill.id, name=skill.name, category=skill.category, group_id=skill.group_id, parent_id=skill.parent_id,
-        group_locked=skill.group_locked, mark=skill.mark, plan_note=skill.plan_note,
+        id=skill.id, name=skill.name, description=skill.description, category=skill.category,
+        group_id=skill.group_id, parent_id=skill.parent_id, group_locked=skill.group_locked, mark=skill.mark, plan_note=skill.plan_note,
         jobs=[
             Evidence(job_id=r.job.id, title=r.job.title, company=r.job.company.name, importance=r.importance,
                      evidence=r.evidence, years=years_text(r.min_years, r.max_years), detail=r.detail)
@@ -256,6 +260,8 @@ def get_skill(skill_id: int, group_id: int | None = None, session: Session = Dep
 
 
 class SkillUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
     mark: SkillMark | None = None
     plan_note: str | None = Field(default=None, max_length=10_000)
     # Moving it in the tree; extraction leaves it there afterwards.
@@ -273,6 +279,18 @@ def update_skill(skill_id: int, body: SkillUpdate, group_id: int | None = None, 
         skill.mark = changes["mark"]
     if changes.get("plan_note") is not None:
         skill.plan_note = changes["plan_note"]
+    if changes.get("description") is not None:
+        skill.description = changes["description"].strip()
+    if changes.get("name") and (name := " ".join(changes["name"].split())) != skill.name:
+        key = skills.skill_key(name)
+        other = extraction.find_skill(session, key)
+        if other is not None and other.id != skill.id:
+            raise HTTPException(409, f"There is already a skill called {other.name}")
+        if key != skill.key:
+            # Postings that still use the old name find it under the new one.
+            skill.old_keys = (skill.old_keys or "\n") + f"{skill.key}\n"
+            skill.key = key
+        skill.name = name
     if "group_id" in changes:
         if changes["group_id"] is not None and session.get(SkillGroup, changes["group_id"]) is None:
             _missing("Group")
@@ -291,14 +309,63 @@ def update_skill(skill_id: int, body: SkillUpdate, group_id: int | None = None, 
     return _skill_detail(skill, group_id)
 
 
+def _asked(session: Session) -> dict[int, int]:
+    """How many targets ask for each skill."""
+    return dict(session.execute(
+        select(Requirement.skill_id, func.count())
+        .join(Job, Job.id == Requirement.job_id)
+        .where(Requirement.source != "removed", Job.target_group_id.is_not(None))
+        .group_by(Requirement.skill_id)
+    ).all())
+
+
 @router.get("/skills", response_model=list[SkillRow])
 def list_skills(session: Session = Depends(get_session)):
-    """Every skill, for choosing a parent."""
+    """Every skill, with how many targets ask for it (the tree shows those, and the ones the user placed)."""
+    asked = _asked(session)
     return [
         SkillRow(id=s.id, name=s.name, category=s.category, group_id=s.group_id, parent_id=s.parent_id, mark=s.mark,
-                 plan_note=s.plan_note, jobs=0, must=0, nice=0, years=[], details=[])
+                 plan_note=s.plan_note, jobs=asked.get(s.id, 0), must=0, nice=0, years=[], details=[],
+                 placed=s.group_locked, description=s.description)
         for s in session.scalars(select(Skill).order_by(func.lower(Skill.name)))
     ]
+
+
+class SkillIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    group_id: int | None = None
+    parent_id: int | None = None
+
+
+@router.post("/skills", response_model=list[SkillRow], status_code=201)
+def add_skill(body: SkillIn, session: Session = Depends(get_session)):
+    """A skill the user puts in the tree themselves (an existing one with that name is moved there)."""
+    if body.group_id is not None and session.get(SkillGroup, body.group_id) is None:
+        _missing("Group")
+    if body.parent_id is not None and session.get(Skill, body.parent_id) is None:
+        _missing("Parent skill")
+    skill = extraction.get_or_create_skill(session, " ".join(body.name.split()))
+    if body.parent_id != skill.id:
+        skill.parent_id = body.parent_id
+    skill.group_id, skill.group_locked = body.group_id, True
+    session.commit()
+    return list_skills(session)
+
+
+@router.delete("/skills/{skill_id}", response_model=list[SkillRow])
+def remove_skill(skill_id: int, session: Session = Depends(get_session)):
+    """Takes a skill out of the tree, and off every job that asks for it."""
+    skill = session.get(Skill, skill_id) or _missing("Skill")
+    for req in skill.requirements:
+        req.source = "removed"  # remembered, so reading the description again doesn't add it back
+    for child in session.scalars(select(Skill).where(Skill.parent_id == skill.id)):
+        child.parent_id = None
+    if skill.requirements:
+        skill.group_id, skill.parent_id, skill.group_locked = None, None, False
+    else:
+        session.delete(skill)
+    session.commit()
+    return list_skills(session)
 
 
 # ---- The tree
@@ -314,8 +381,8 @@ class NodeUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
     parent_id: int | None = None
-    # Swap with the sibling above or below.
-    move: str | None = Field(default=None, pattern="^(up|down)$")
+    # Where it goes among the (new) parent's children; sent together with parent_id when dragged.
+    index: int | None = Field(default=None, ge=0)
 
 
 def _siblings(session: Session, parent_id: int | None) -> list[SkillGroup]:
@@ -354,26 +421,23 @@ def update_group_node(node_id: int, body: NodeUpdate, session: Session = Depends
         node.name = " ".join(changes["name"].split())
     if changes.get("description") is not None:
         node.description = changes["description"].strip()
-    if "parent_id" in changes and changes["parent_id"] != node.parent_id:
-        parent = session.get(SkillGroup, changes["parent_id"]) if changes["parent_id"] is not None else None
-        if changes["parent_id"] is not None and parent is None:
+    if "parent_id" in changes or changes.get("index") is not None:
+        parent_id = changes.get("parent_id", node.parent_id)
+        parent = session.get(SkillGroup, parent_id) if parent_id is not None else None
+        if parent_id is not None and parent is None:
             _missing("Group")
         ancestor = parent
         while ancestor is not None:  # not into itself or its own subgroups
             if ancestor.id == node.id:
                 raise HTTPException(422, "A group can't go inside itself")
             ancestor = session.get(SkillGroup, ancestor.parent_id) if ancestor.parent_id else None
-        old = [g for g in _siblings(session, node.parent_id) if g.id != node.id]
-        node.parent_id = changes["parent_id"]
-        node.position = len(_siblings(session, node.parent_id))
-        _renumber(old)
-    if changes.get("move"):
-        siblings = _siblings(session, node.parent_id)
-        i = siblings.index(node)
-        j = i - 1 if changes["move"] == "up" else i + 1
-        if 0 <= j < len(siblings):
-            siblings[i], siblings[j] = siblings[j], siblings[i]
-            _renumber(siblings)
+        if parent_id != node.parent_id:
+            _renumber([g for g in _siblings(session, node.parent_id) if g.id != node.id])
+        siblings = [g for g in _siblings(session, parent_id) if g.id != node.id]
+        index = changes.get("index")
+        siblings.insert(len(siblings) if index is None else min(index, len(siblings)), node)
+        node.parent_id = parent_id
+        _renumber(siblings)
     session.commit()
     return _groups(session)
 
@@ -406,7 +470,7 @@ def tree_text(session: Session) -> str:
     for req in session.scalars(select(Requirement)):
         if req.active:
             asked[req.skill_id] += 1
-    in_use = [s for s in all_skills if asked[s.id]]
+    in_use = [s for s in all_skills if asked[s.id] or s.group_locked]
     lines: list[str] = []
 
     by_id = {s.id: s for s in all_skills}
@@ -415,7 +479,8 @@ def tree_text(session: Session) -> str:
         for s in sorted(items, key=lambda s: (-asked[s.id], s.name.casefold())):
             parent = by_id.get(s.parent_id) if s.parent_id else None
             under = f", belongs to {parent.name}" if parent and parent not in items else ""
-            lines.append("  " * depth + f"- {s.name} (in {asked[s.id]} job{'s' if asked[s.id] != 1 else ''}{under})")
+            meaning = f" — {s.description}" if s.description else ""
+            lines.append("  " * depth + f"- {s.name} (in {asked[s.id]} job{'s' if asked[s.id] != 1 else ''}{under}){meaning}")
             # Its children filed in the same group; one in another group is listed there.
             skill_lines([c for c in in_use if c.parent_id == s.id and c.group_id == s.group_id], depth + 1)
 

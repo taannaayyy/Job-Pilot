@@ -126,6 +126,15 @@ class Tree:
         def path(g: SkillGroup) -> str:
             return (path(by_id[g.parent_id]) + ai.SEP if g.parent_id in by_id else "") + g.name
 
+        # What is already filed in a group tells the model what belongs there.
+        filed: dict[int, list[str]] = {}
+        for name, group_id in session.execute(select(Skill.name, Skill.group_id).where(Skill.group_id.is_not(None))):
+            filed.setdefault(group_id, []).append(name)
+
+        def describe(g: SkillGroup) -> str:
+            names = sorted(filed.get(g.id, []), key=str.casefold)[:20]
+            return "; ".join(x for x in (g.description, "Includes: " + ", ".join(names) if names else "") if x)
+
         tree = cls([])
         for g in sorted(rows, key=lambda g: path(g).casefold()):
             p = path(g)
@@ -133,7 +142,7 @@ class Tree:
             if g.key:
                 tree.id_of_key[g.key] = g.id
             if g.id not in with_children:
-                tree.groups.append(ai.Group(p, g.description))
+                tree.groups.append(ai.Group(p, describe(g)))
         return tree
 
 
@@ -228,12 +237,19 @@ def extract(text: str, provider: Provider, trace: list[str] | None = None, tree:
     return Result(list(found.values()), used, warning)
 
 
+def find_skill(session: Session, key: str) -> Skill | None:
+    """The skill with this key now, or before the user renamed it."""
+    return session.scalar(select(Skill).where(Skill.key == key)) or session.scalar(
+        select(Skill).where(Skill.old_keys.contains(f"\n{key}\n"))
+    )
+
+
 def get_or_create_skill(session: Session, name: str, group_id: int | None = None, group_key: str | None = None) -> Skill:
     """The skill under its dictionary name; a new one is filed in the given group."""
     known = skills.lookup(name)
     name = known[0] if known else name.strip()
     key = skills.skill_key(name)
-    skill = session.scalar(select(Skill).where(Skill.key == key))
+    skill = find_skill(session, key)
     if skill is None:
         skill = Skill(name=name, key=key, category=group_key or (known[1] if known else "other"), group_id=group_id)
         session.add(skill)
@@ -250,7 +266,7 @@ def file_skill(session: Session, skill: Skill, tree: Tree, group_id: int | None,
         skill.group_id = group_id
     if parent and skills.skill_key(parent) != skill.key:
         known = skills.lookup(parent)
-        existing = session.scalar(select(Skill).where(Skill.key == skills.skill_key(known[0] if known else parent)))
+        existing = find_skill(session, skills.skill_key(known[0] if known else parent))
         if existing is None and known:  # "Python" for pandas; never invent a parent the model made up
             existing = get_or_create_skill(session, known[0], tree.id_of_key.get(known[1]), known[1])
         if existing is not None and existing.id != skill.id:

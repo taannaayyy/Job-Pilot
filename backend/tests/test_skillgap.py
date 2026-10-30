@@ -651,12 +651,31 @@ def test_editing_the_tree(client):
     groups = client.post("/api/skill-groups", json={"name": "Vector search", "parent_id": tech["id"]}).json()
     new = next(g for g in groups if g["name"] == "Vector search")
     assert new["position"] == 7  # after the seven starting subgroups
-    client.patch(f"/api/skill-groups/{new['id']}", json={"move": "up"})
-    assert _groups(client)["Vector search"]["position"] == 6
+    client.patch(f"/api/skill-groups/{new['id']}", json={"index": 0})
+    assert _groups(client)["Vector search"]["position"] == 0
+    assert _groups(client)["Programming languages"]["position"] == 1
     client.patch(f"/api/skill-groups/{new['id']}", json={"name": "Search", "description": "Elasticsearch, vector search"})
     assert _groups(client)["Search"]["description"] == "Elasticsearch, vector search"
     # Not inside itself or its own subgroups.
     assert client.patch(f"/api/skill-groups/{tech['id']}", json={"parent_id": new["id"]}).status_code == 422
+
+
+def test_dragging_a_group_into_another_place(client):
+    groups = _groups(client)
+    cloud, know, ml = groups["Cloud & infrastructure"], groups["Knowledge areas"], groups["Machine learning"]
+    client.patch(f"/api/skill-groups/{cloud['id']}", json={"parent_id": know["id"], "index": 1})
+    groups = _groups(client)
+    assert groups["Cloud & infrastructure"]["parent_id"] == know["id"]
+    assert groups["Cloud & infrastructure"]["position"] == 1 and groups["Deep learning"]["position"] == 2
+    assert groups["Machine learning"]["position"] == ml["position"] == 0
+    # The groups it left close the gap.
+    tech = sorted((g for g in groups.values() if g["parent_id"] == groups["Technologies"]["id"]), key=lambda g: g["position"])
+    assert [g["position"] for g in tech] == list(range(6))
+    # Out to the top level, at the end.
+    client.patch(f"/api/skill-groups/{cloud['id']}", json={"parent_id": None})
+    groups = _groups(client)
+    assert groups["Cloud & infrastructure"]["parent_id"] is None
+    assert groups["Cloud & infrastructure"]["position"] == max(g["position"] for g in groups.values() if g["parent_id"] is None)
 
 
 def test_deleting_a_group_moves_its_skills_and_subgroups_up(client):
@@ -733,3 +752,52 @@ def test_recommendation_chat_sends_the_whole_tree(client, monkeypatch):
 def test_the_dictionary_cant_chat(client):
     res = client.post("/api/ai/chat", json={"provider": "none", "messages": [{"role": "user", "content": "hi"}]})
     assert res.status_code == 422
+
+
+def test_skills_are_items_in_the_tree(client):
+    target(client, text="Requirements\n- Python and pandas")
+    langs = _groups(client)["Programming languages"]
+    skills = {s["name"]: s for s in client.get("/api/skills").json()}
+    assert skills["Python"]["jobs"] == 1 and skills["Python"]["group_id"] == langs["id"]
+    # Added by hand: next to Python, at the same level.
+    skills = {s["name"]: s for s in client.post("/api/skills", json={"name": " Go ", "group_id": langs["id"]}).json()}
+    assert skills["Go"]["group_id"] == langs["id"] and skills["Go"]["placed"] and skills["Go"]["jobs"] == 0
+    # Dragged under another skill.
+    client.patch(f"/api/skills/{skills['pandas']['id']}", json={"group_id": langs["id"], "parent_id": skills["Go"]["id"]})
+    assert next(s for s in client.get("/api/skills").json() if s["name"] == "pandas")["parent_id"] == skills["Go"]["id"]
+    assert "Go" not in {s["name"] for s in client.delete(f"/api/skills/{skills['Go']['id']}").json()}
+
+
+def test_removing_a_skill_takes_it_off_its_jobs_for_good(client):
+    job, _ = target(client, text="Requirements\n- Python and pandas")
+    python = next(s for s in client.get("/api/skills").json() if s["name"] == "Python")
+    rows = {s["name"]: s for s in client.delete(f"/api/skills/{python['id']}").json()}
+    assert rows["Python"]["jobs"] == 0 and not rows["Python"]["placed"] and rows["Python"]["group_id"] is None
+    assert rows["pandas"]["parent_id"] is None
+    assert "Python" not in {r["name"] for r in client.get(f"/api/jobs/{job['id']}").json()["requirements"]}
+    # Reading the posting again doesn't bring it back.
+    client.post(f"/api/jobs/{job['id']}/extract")
+    assert "Python" not in {r["name"] for r in client.get(f"/api/jobs/{job['id']}").json()["requirements"]}
+
+
+def test_the_model_learns_a_group_from_its_skills(client):
+    search = next(g for g in client.post("/api/skill-groups", json={"name": "Search"}).json() if g["name"] == "Search")
+    client.post("/api/skills", json={"name": "Elasticsearch", "group_id": search["id"]})
+    with client.app.state.sessionmaker() as session:
+        tree = extraction.Tree.load(session)
+    assert next(g for g in tree.groups if g.path == "Search").description == "Includes: Elasticsearch"
+
+
+def test_renaming_a_skill_keeps_finding_it_under_the_old_name(client):
+    job, _ = target(client, text="Requirements\n- PyTorch and SQL")
+    rows = {s["name"]: s for s in client.get("/api/skills").json()}
+    torch = rows["PyTorch"]
+    res = client.patch(f"/api/skills/{torch['id']}", json={"name": "Torch", "description": "Deep learning framework"})
+    assert res.json()["name"] == "Torch" and res.json()["description"] == "Deep learning framework"
+    # A posting that says PyTorch lands on the renamed skill, not a new one.
+    other, _ = target(client, title="ML Engineer", text="Requirements\n- PyTorch")
+    names = [s["name"] for s in client.get("/api/skills").json()]
+    assert "Torch" in names and "PyTorch" not in names
+    assert {r["name"] for r in client.get(f"/api/jobs/{other['id']}").json()["requirements"]} == {"Torch"}
+    # Two skills can't share a name.
+    assert client.patch(f"/api/skills/{torch['id']}", json={"name": "sql"}).status_code == 409

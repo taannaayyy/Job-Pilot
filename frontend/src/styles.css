@@ -226,7 +226,6 @@ button.icon {
   border-radius: 8px;
 }
 button.icon:hover:not(:disabled) { background: var(--surface-2); color: var(--text); box-shadow: none; }
-button.icon:hover svg { transform: rotate(90deg); }
 button.icon svg { transition: transform 0.25s var(--ease-out); }
 
 .ripple {
@@ -1304,53 +1303,86 @@ label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13
 .fields.place { margin-bottom: 4px; }
 
 /* Tree editor and recommendation chat */
-.modal.tree-modal { width: min(1080px, calc(100vw - 32px)); height: min(760px, calc(100vh - 32px)); display: flex; flex-direction: column; }
+/* The tree and the chat scroll inside it; the dialog itself never does, and keeps no transform after opening. */
+.modal.tree-modal { width: min(1080px, calc(100vw - 32px)); height: min(760px, calc(100vh - 32px)); display: flex; flex-direction: column; overflow: hidden; animation-fill-mode: backwards; }
 .tree-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; }
 .tree-side, .chat-side { min-height: 0; display: flex; flex-direction: column; }
 .tree-side .modal-hint { margin-top: 0; }
-.tree-list { list-style: none; margin: 0; padding: 4px; flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
-.tree-node { display: flex; align-items: center; gap: 6px; border-radius: 8px; padding-right: 4px; }
-.tree-node:hover { background: var(--surface-3); }
-.tree-node.depth-0 .tree-name { font-weight: 700; }
-.tree-name {
-  flex: 1;
+.tree-view { list-style: none; margin: 0; padding: 8px 6px; flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.tree-view.drop-root { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent); }
+.tchildren { list-style: none; margin: 0; padding-left: 24px; }
+.tnode { position: relative; }
+/* The branch lines: an elbow into each child, and the trunk down to the next one. */
+.tchildren > .tnode::before,
+.tchildren > .tnode:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: -14px;
+  border-left: 1.5px solid color-mix(in srgb, var(--muted) 45%, transparent);
+  pointer-events: none;
+}
+.tchildren > .tnode::before { top: 0; width: 12px; height: 17px; border-bottom: 1.5px solid color-mix(in srgb, var(--muted) 45%, transparent); border-bottom-left-radius: 7px; }
+.tchildren > .tnode.leaf::before { width: 34px; }
+.tchildren > .tnode:not(:last-child)::after { top: 17px; bottom: 0; }
+.trow {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-  height: auto;
-  padding: 7px 6px;
-  border: 0;
-  background: none;
-  box-shadow: none;
-  font-weight: 500;
-  text-align: left;
-  color: var(--text);
+  gap: 4px;
+  height: 34px;
+  padding-right: 4px;
+  border-radius: 8px;
+  cursor: grab;
+  user-select: none;
+  transition: background 0.12s, opacity 0.12s;
 }
-.tree-name:hover:not(:disabled) { background: none; transform: none; color: var(--accent); }
-.tree-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s; }
-.tree-node:hover .tree-actions, .tree-node:focus-within .tree-actions { opacity: 1; }
-.tree-actions button.icon { width: 26px; height: 26px; }
-.tree-actions svg { width: 14px; height: 14px; }
-.tree-edit {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin: 4px 0;
-  padding: 10px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+.trow:hover { background: var(--surface-3); }
+.trow.selected { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.trow.dragging { opacity: 0.4; }
+.trow.drop-inside { background: color-mix(in srgb, var(--accent) 20%, transparent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.trow.drop-before::before, .trow.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  right: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
 }
+.trow.drop-before::before { top: -1px; }
+.trow.drop-after::after { bottom: -1px; }
+.tree-view > .tnode > .trow .tname { font-weight: 700; }
+.trow button.tchev { width: 20px; height: 20px; padding: 0; flex: none; }
+.trow button.tchev svg { width: 14px; height: 14px; transition: transform 0.15s; }
+.trow button.tchev.closed svg { transform: rotate(-90deg); }
+.tgrip { display: flex; color: var(--muted); visibility: hidden; }
+.tgrip svg { width: 14px; height: 14px; }
+.trow:hover .tgrip { visibility: visible; }
+.tname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 500; }
+.trename { flex: 1; min-width: 0; height: 26px; padding: 2px 8px; font-size: 13.5px; }
+/* Shown on hover without fading: a fade repaints the dialog in WebKit and can nudge it by a pixel. */
+.trow .tree-actions { display: flex; gap: 2px; visibility: hidden; }
+.trow:hover .tree-actions, .trow:focus-within .tree-actions { visibility: visible; }
+.trow .tree-actions button.icon { width: 26px; height: 26px; }
+.trow .tree-actions svg { width: 14px; height: 14px; }
+.ticon { display: flex; color: var(--muted); }
+.ticon svg { width: 15px; height: 15px; }
+.tchev-space { width: 20px; flex: none; }
+.trow.skill .tname { font-weight: 400; }
+.trow.skill .dot { width: 8px; height: 8px; flex: none; }
+.trow.unsorted { cursor: default; }
+.trow.unsorted .tname { font-style: italic; color: var(--muted); }
+.tree-add-row { margin: 8px 0; }
+.tree-edit { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .tree-edit label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
-.tree-edit label > :is(input, select, textarea) { color: var(--text); font-weight: 400; font-size: 13.5px; }
-.tree-edit .wide, .tree-edit .row { grid-column: 1 / -1; }
+.tree-edit label > :is(input, textarea) { color: var(--text); font-weight: 400; font-size: 13.5px; }
+.tree-edit textarea { resize: none; }
 .tree-edit .row { display: flex; gap: 6px; }
-.tree-edit textarea { resize: vertical; }
-.tree-add { margin-top: 8px; align-self: flex-start; }
+.skill-meaning { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .chat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .chat-head select { width: auto; }
-.chat-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.chat-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
 .chat-empty { margin: auto; max-width: 340px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .chat-empty p { margin: 0; line-height: 1.5; font-size: 13px; }
 .chat-msg { max-width: 92%; padding: 9px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; animation: rise 0.25s var(--ease-out) both; }
@@ -1372,7 +1404,7 @@ label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13
   .tree-layout { grid-template-columns: 1fr; overflow-y: auto; }
   .modal.tree-modal { height: calc(100vh - 32px); }
 }
-.tree-name { justify-content: flex-start; }
+fieldset.fields.place select { width: 100%; min-width: 0; }
 .fields.place select { width: 100%; min-width: 0; }
 .fields.place label { min-width: 0; }
 .md table { border-collapse: collapse; width: 100%; margin: 4px 0 10px; font-size: 12.5px; table-layout: auto; }

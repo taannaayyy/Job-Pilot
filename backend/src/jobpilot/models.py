@@ -204,6 +204,10 @@ class Skill(Base):
     mark: Mapped[SkillMark | None] = mapped_column(String(10))
     # What the user plans to do about it: a course, a project idea.
     plan_note: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # What it means, in the user's words.
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # Keys of its names before the user renamed it ("\npytorch\n"), so postings that still use them find it.
+    old_keys: Mapped[str] = mapped_column(Text, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     requirements: Mapped[list["Requirement"]] = relationship(back_populates="skill", cascade="all, delete-orphan")

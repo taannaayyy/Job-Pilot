@@ -72,7 +72,14 @@ export const api = {
   getSkill: (id: number, groupId: number | null) => request<SkillDetail>(`/skills/${id}${groupQuery(groupId)}`),
   updateSkill: (
     id: number,
-    body: { mark?: SkillMark | null; plan_note?: string; group_id?: number | null; parent_id?: number | null },
+    body: {
+      name?: string;
+      description?: string;
+      mark?: SkillMark | null;
+      plan_note?: string;
+      group_id?: number | null;
+      parent_id?: number | null;
+    },
     groupId: number | null,
   ) =>
     request<SkillDetail>(`/skills/${id}${groupQuery(groupId)}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -83,12 +90,15 @@ export const api = {
   removeRequirement: (jobId: number, id: number) =>
     request<JobDetail>(`/jobs/${jobId}/requirements/${id}`, { method: "DELETE" }),
   listSkills: () => request<SkillRow[]>("/skills"),
+  createSkill: (body: { name: string; group_id: number | null; parent_id?: number | null }) =>
+    request<SkillRow[]>("/skills", { method: "POST", body: JSON.stringify(body) }),
+  deleteSkill: (id: number) => request<SkillRow[]>(`/skills/${id}`, { method: "DELETE" }),
   listSkillGroups: () => request<SkillGroupNode[]>("/skill-groups"),
   createSkillGroup: (body: { name: string; parent_id: number | null; description?: string }) =>
     request<SkillGroupNode[]>("/skill-groups", { method: "POST", body: JSON.stringify(body) }),
   updateSkillGroup: (
     id: number,
-    body: { name?: string; description?: string; parent_id?: number | null; move?: "up" | "down" },
+    body: { name?: string; description?: string; parent_id?: number | null; index?: number },
   ) => request<SkillGroupNode[]>(`/skill-groups/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteSkillGroup: (id: number) => request<SkillGroupNode[]>(`/skill-groups/${id}`, { method: "DELETE" }),
   chat: (messages: { role: "user" | "assistant"; content: string }[], provider?: AIProvider) =>

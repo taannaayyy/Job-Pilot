@@ -170,14 +170,28 @@ export const SendIcon = () => (
   </svg>
 );
 
-export const ArrowUpIcon = () => (
+
+
+export const GripIcon = () => (
   <svg {...base}>
-    <path d="M12 19V5M6 11l6-6 6 6" />
+    <circle cx="9" cy="6" r="1" />
+    <circle cx="15" cy="6" r="1" />
+    <circle cx="9" cy="12" r="1" />
+    <circle cx="15" cy="12" r="1" />
+    <circle cx="9" cy="18" r="1" />
+    <circle cx="15" cy="18" r="1" />
   </svg>
 );
 
-export const ArrowDownIcon = () => (
+export const FolderPlusIcon = () => (
   <svg {...base}>
-    <path d="M12 5v14M6 13l6 6 6-6" />
+    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <path d="M12 10v6M9 13h6" />
+  </svg>
+);
+
+export const TrashIcon = () => (
+  <svg {...base}>
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
   </svg>
 );

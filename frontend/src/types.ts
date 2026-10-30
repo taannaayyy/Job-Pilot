@@ -168,6 +168,10 @@ export interface SkillRow {
   years: string[];
   /** Degrees: accepted fields of study. */
   details: string[];
+  /** Placed or added by the user: in the tree even when no target asks for it. */
+  placed: boolean;
+  /** What it means, in the user's words. */
+  description: string;
 }
 
 export interface SkillGap {
@@ -185,6 +189,7 @@ export interface SkillGap {
 export interface SkillDetail {
   id: number;
   name: string;
+  description: string;
   category: string;
   group_id: number | null;
   parent_id: number | null;
