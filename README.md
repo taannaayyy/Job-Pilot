@@ -53,9 +53,9 @@ A skill your tree doesn't have yet waits in **Unsorted**. The **Unsorted** butto
 
 ### The skill tree
 
-The tree starts as a designed tree, general to specific (Technologies › Machine learning › Deep learning › Computer vision › Object detection › YOLO, plus Domain knowledge, Background and Soft skills, hidden by default). After that, only you change it.
+The tree starts as a general skeleton for any field: **Technologies** (programming languages, databases, cloud, DevOps, software engineering), an empty **Domain knowledge**, **Background** (experience, education, spoken languages) and **Soft skills**, hidden by default. You grow it from your own postings, general to specific (Technologies › Programming languages › Python › pandas), and only you change it.
 
-- A node is a **skill**, which postings ask for and which can hold other skills (a posting can ask for Machine learning as much as for YOLO), or a **group**, like Cloud, which only organizes.
+- A node is a **skill**, which postings ask for and which can hold other skills (a posting can ask for Python as much as for pandas), or a **group**, like Cloud, which only organizes.
 - Each node counts the postings that ask for it or for anything under it. Its details say how many name it and how many name something under it, show its description and what is under it, and list the postings with the line each one asks for it in.
 - See the tree as a **diagram** of one area, an **outline** with a bar per skill, or **columns** you browse one level at a time. Search it, hide parts of it, and order skills as in the tree, by how often they are asked for, or A–Z. What no posting asks for is drawn faint; **Only asked for** hides it.
 

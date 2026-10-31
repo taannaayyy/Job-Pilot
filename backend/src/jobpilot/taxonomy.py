@@ -1,10 +1,9 @@
-"""The skill tree the app starts with, designed by the user. It is the only structure: readings
-never add to it or rearrange it; they only say which of its skills a posting asks for, and
-anything else waits in Unsorted until the user places it. A node is a skill, which postings ask for
-("Machine learning" as much as "YOLO") and which can hold other skills, or a [group], which only
+"""The skill tree a new database starts with: a general skeleton for any field. The user grows it
+from their own postings (skills a posting asks for that it lacks wait in Unsorted) and changes it on
+the Skill Gap page; this text is only where it starts, and an existing tree never changes with it.
+A node is a skill, which postings ask for and which can hold other skills, or a [group], which only
 organizes ("Cloud") and is never asked for itself. A node counts the postings that ask for it or
-for anything under it. The user changes the tree on the Skill Gap page; this text is only where it
-starts.
+for anything under it.
 
 Two spaces of indent are one level deeper; [brackets] mark a group."""
 
@@ -12,85 +11,25 @@ TREE = """
 [Technologies]
   [Programming languages]
     Python
-      pandas
-      NumPy
-      scikit-learn
-      PyTorch
-      TensorFlow
-    SQL
-    R
+    JavaScript
     Java
-    C++
-  Machine learning
-    [Classical ML]
-      Regression
-      Classification
-      Clustering
-      Tree-based models
-      Time series
-      Recommender systems
-    Deep learning
-      Computer vision
-        Object detection
-          YOLO
-        Image segmentation
-          U-Net
-        Image classification
-          ResNet
-      NLP
-        Named entity recognition
-        Text classification
-        Language models
-          BERT
-    Generative AI
-      LLMs
-      RAG
-      Prompt engineering
-      Fine-tuning
-    [ML workflow]
-      Feature engineering
-      Model training
-      Model evaluation
-  [Data & analytics]
-    Statistics
-      A/B testing
-    Exploratory data analysis
-    Data preprocessing
-    Data mining
-    Data visualization
-      Power BI
-      Tableau
+    SQL
   [Databases]
-    Relational (SQL)
-      PostgreSQL
-      MySQL
+    Relational databases
     NoSQL
-      MongoDB
-    Vector databases
-  [Data engineering]
-    ETL
-    Apache Spark
-    Airflow
   [Cloud]
     AWS
     Azure
     Google Cloud
-  [MLOps & DevOps]
-    MLOps
-    Model deployment
-    Monitoring
+  [DevOps]
     Docker
-    Kubernetes
     Git
     CI/CD
   [Software engineering]
     APIs
-    Data structures and algorithms
     System design
     Software testing
 [Domain knowledge]
-  Pharmaceuticals
-  Finance
 [Background]
   [Experience]
     Professional experience
@@ -100,13 +39,12 @@ TREE = """
     PhD
   [Spoken languages]
     English
-    Turkish
 [Soft skills]
   Communication
   Problem solving
   Analytical thinking
-  Stakeholder management
   Teamwork
+  Leadership
 """
 
 OVERALL_EXPERIENCE = "Professional experience"

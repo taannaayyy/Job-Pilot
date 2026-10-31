@@ -643,7 +643,7 @@ export function MapDetails({
                     className="connection-note"
                     value={note.text}
                     maxLength={500}
-                    placeholder="The line in the posting, e.g. 3+ years with YOLO"
+                    placeholder="The line in the posting, e.g. 3+ years with Docker"
                     onChange={(e) => setNote({ jobId: p.id, text: e.target.value })}
                     onBlur={saveNote}
                     onKeyDown={(e) => {

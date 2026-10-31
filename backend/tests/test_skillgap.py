@@ -40,6 +40,13 @@ def target(client, title="AI Engineer", group="AI Engineer (now)", connect=("Pyt
     return client.get(f"/api/jobs/{job['id']}").json(), group_id
 
 
+def _under(client, parent, *names):
+    """Grows the starting tree: the skills, under the node named parent."""
+    for name in names:
+        res = client.post("/api/skills", json={"name": name, "parent_id": _skills(client)[parent]["id"]})
+        assert res.status_code == 201, res.text
+
+
 def _skills(client):
     return {s["name"]: s for s in client.get("/api/skills").json()}
 
@@ -78,19 +85,19 @@ def test_gap_list_counts_jobs_and_coverage(client):
 
 def test_a_skills_connection_to_a_posting(client):
     job, _ = target(client, connect=())
-    yolo = _skills(client)["YOLO"]
-    client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "YOLO", "evidence": " 3+ years with YOLO "})
-    detail = client.get(f"/api/skills/{yolo['id']}").json()
-    assert [(j["title"], j["evidence"], j["importance"]) for j in detail["jobs"]] == [("AI Engineer", "3+ years with YOLO", "must")]
+    docker = _skills(client)["Docker"]
+    client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "Docker", "evidence": " 3+ years with Docker "})
+    detail = client.get(f"/api/skills/{docker['id']}").json()
+    assert [(j["title"], j["evidence"], j["importance"]) for j in detail["jobs"]] == [("AI Engineer", "3+ years with Docker", "must")]
     # From the skill's side, the note and importance can change.
-    detail = client.patch(f"/api/skills/{yolo['id']}/jobs/{job['id']}", json={"evidence": "YOLOv8", "importance": "nice"}).json()
-    assert [(j["evidence"], j["importance"]) for j in detail["jobs"]] == [("YOLOv8", "nice")]
-    # It counts on YOLO, and on what is above it.
+    detail = client.patch(f"/api/skills/{docker['id']}/jobs/{job['id']}", json={"evidence": "Docker Compose", "importance": "nice"}).json()
+    assert [(j["evidence"], j["importance"]) for j in detail["jobs"]] == [("Docker Compose", "nice")]
+    # It counts on Docker; the node above it only adds it up.
     rows = {s["name"]: s for s in client.get("/api/skill-gap").json()["skills"]}
-    assert rows["YOLO"]["job_ids"] == [job["id"]] and rows["Object detection"]["job_ids"] == []
-    assert [r["name"] for r in client.get(f"/api/jobs/{job['id']}").json()["requirements"]] == ["YOLO"]
+    assert rows["Docker"]["job_ids"] == [job["id"]] and rows["DevOps"]["job_ids"] == []
+    assert [r["name"] for r in client.get(f"/api/jobs/{job['id']}").json()["requirements"]] == ["Docker"]
     # Disconnected.
-    assert client.delete(f"/api/skills/{yolo['id']}/jobs/{job['id']}").json()["jobs"] == []
+    assert client.delete(f"/api/skills/{docker['id']}/jobs/{job['id']}").json()["jobs"] == []
     assert client.get(f"/api/jobs/{job['id']}").json()["requirements"] == []
 
 
@@ -103,9 +110,9 @@ def test_a_group_is_never_asked_for(client):
 def test_only_targets_count(client):
     target(client)
     plain = client.post("/api/jobs", json={"company": "Beta", "title": "Data Scientist"}).json()
-    client.post(f"/api/jobs/{plain['id']}/requirements", json={"name": "Tableau"})
+    client.post(f"/api/jobs/{plain['id']}/requirements", json={"name": "Git"})
     rows = {s["name"]: s for s in client.get("/api/skill-gap").json()["skills"]}
-    assert rows["Tableau"]["jobs"] == 0 and rows["Python"]["jobs"] == 1
+    assert rows["Git"]["jobs"] == 0 and rows["Python"]["jobs"] == 1
 
 
 def test_a_jobs_skills_from_its_own_side(client):
@@ -392,9 +399,10 @@ def test_default_is_claude_code_when_installed(monkeypatch, tmp_path, claude_bin
 def test_the_starting_tree_is_the_users():
     nodes = list(taxonomy.nodes())
     assert nodes[0] == ("Technologies", None, 0, True)  # a group: only organizes
-    assert ("YOLO", "Object detection", 0, False) in nodes and ("Computer vision", "Deep learning", 0, False) in nodes
-    assert ("Machine learning", "Technologies", 1, False) in nodes  # a skill that holds skills
-    assert ("Soft skills", None, 3, True) in nodes
+    assert ("Python", "Programming languages", 0, False) in nodes and ("AWS", "Cloud", 0, False) in nodes
+    assert ("Domain knowledge", None, 1, True) in nodes and ("Soft skills", None, 3, True) in nodes
+    # A general skeleton for any field: the user grows it from their postings.
+    assert not {"Machine learning", "YOLO", "Pharmaceuticals", "Turkish"} & {n for n, _, _, _ in nodes}
     # No two nodes share a name.
     assert len({skills.skill_key(n) for n, _, _, _ in nodes}) == len(nodes)
 
@@ -402,21 +410,22 @@ def test_the_starting_tree_is_the_users():
 def test_the_tree_starts_as_designed(client):
     rows = _skills(client)
     assert rows["Technologies"]["parent_id"] is None and rows["Technologies"]["placed"]
-    assert rows["YOLO"]["parent_id"] == rows["Object detection"]["id"]
-    assert rows["Object detection"]["parent_id"] == rows["Computer vision"]["id"]
-    assert rows["pandas"]["parent_id"] == rows["Python"]["id"]
-    assert [rows[n]["position"] for n in ("Python", "SQL", "R")] == [0, 1, 2]
+    assert rows["Python"]["parent_id"] == rows["Programming languages"]["id"]
+    assert rows["Programming languages"]["parent_id"] == rows["Technologies"]["id"]
+    assert rows["AWS"]["parent_id"] == rows["Cloud"]["id"]
+    assert [rows[n]["position"] for n in ("Python", "JavaScript", "Java")] == [0, 1, 2]
     # In order: the tree's own order, from the top.
     assert client.get("/api/skills").json()[0]["name"] == "Technologies"
 
 
 def test_postings_count_on_the_tree_and_the_rest_waits_in_unsorted(client):
+    _under(client, "Python", "pandas")
     target(client, connect=("pandas", "SQL", "Keras"))
     gap = client.get("/api/skill-gap").json()
     rows = {s["name"]: s for s in gap["skills"]}
     assert rows["pandas"]["parent_id"] == rows["Python"]["id"] and rows["pandas"]["jobs"] == 1
     # The whole tree is there, asked for or not.
-    assert rows["Python"]["jobs"] == 0 and rows["Technologies"]["jobs"] == 0 and "YOLO" in rows
+    assert rows["Python"]["jobs"] == 0 and rows["Technologies"]["jobs"] == 0 and "Git" in rows
     # Not in the tree: Unsorted, until the user places it.
     assert not rows["Keras"]["placed"] and rows["Keras"]["parent_id"] is None
 
@@ -443,6 +452,7 @@ def test_adding_moving_and_reordering_nodes(client):
 
 
 def test_a_skill_cant_be_under_its_own_child(client):
+    _under(client, "Python", "pandas")
     rows = _skills(client)
     pandas, python = rows["pandas"], rows["Python"]
     assert client.patch(f"/api/skills/{python['id']}", json={"parent_id": pandas["id"]}).status_code == 422
@@ -450,20 +460,22 @@ def test_a_skill_cant_be_under_its_own_child(client):
 
 
 def test_placing_a_skill_from_unsorted_and_back(client):
+    _under(client, "Python", "pandas", "NumPy")
     target(client, connect=("Keras",))
     rows = _skills(client)
     client.patch(f"/api/skills/{rows['Keras']['id']}", json={"parent_id": rows["Python"]["id"]})
     rows = _skills(client)
     assert rows["Keras"]["placed"] and rows["Keras"]["parent_id"] == rows["Python"]["id"]
-    assert rows["Keras"]["position"] == 5  # after the five libraries already there
+    assert rows["Keras"]["position"] == 2  # after the two libraries already there
     # Back to Unsorted: its children take its place.
     client.patch(f"/api/skills/{rows['Python']['id']}", json={"placed": False})
     rows = _skills(client)
     assert not rows["Python"]["placed"] and rows["pandas"]["parent_id"] == rows["Programming languages"]["id"]
-    assert [rows[n]["position"] for n in ("pandas", "NumPy", "SQL")] == [0, 1, 6]
+    assert [rows[n]["position"] for n in ("pandas", "NumPy", "Keras", "JavaScript", "SQL")] == [0, 1, 2, 3, 5]
 
 
 def test_removing_a_skill_takes_it_off_its_jobs(client):
+    _under(client, "Python", "pandas")
     job, _ = target(client, connect=("Python", "pandas"))
     rows = _skills(client)
     rows = {s["name"]: s for s in client.delete(f"/api/skills/{rows['Python']['id']}").json()}
@@ -474,7 +486,7 @@ def test_removing_a_skill_takes_it_off_its_jobs(client):
 
 def test_adding_a_group(client):
     rows = _skills(client)
-    assert rows["Cloud"]["is_group"] and not rows["Machine learning"]["is_group"]
+    assert rows["Cloud"]["is_group"] and not rows["Python"]["is_group"]
     rows = {s["name"]: s for s in client.post("/api/skills", json={
         "name": "Search", "parent_id": rows["Technologies"]["id"], "is_group": True, "description": "Search engines"}).json()}
     assert rows["Search"]["is_group"] and rows["Search"]["description"] == "Search engines"
@@ -525,15 +537,15 @@ def test_upgrading_keeps_skills_and_their_postings(tmp_path):
     command.upgrade(cfg, "f2a6c8e1b4d9")
     con = sqlite3.connect(db)
     con.execute("INSERT INTO skill (id, name, key, category, plan_note, created_at, group_locked, description, old_keys) "
-                "VALUES (7, 'PyTorch', 'pytorch', 'tech', '', '2026-01-01', 1, '', ''), "
+                "VALUES (7, 'Python', 'python', 'tech', '', '2026-01-01', 1, '', ''), "
                 "(8, 'Ranking', 'ranking', 'tech', '', '2026-01-01', 0, '', '')")
     con.commit()
     command.upgrade(cfg, "head")
     rows = {r[0]: r[1:] for r in con.execute(
         "SELECT s.name, s.id, s.placed, s.is_group, p.name FROM skill s LEFT JOIN skill p ON p.id = s.parent_id")}
-    assert rows["PyTorch"] == (7, 1, 0, "Python")
+    assert rows["Python"] == (7, 1, 0, "Programming languages")
     assert rows["Ranking"] == (8, 0, 0, None)
-    assert rows["YOLO"][1:] == (1, 0, "Object detection") and rows["Cloud"][2] == 1
+    assert rows["Docker"][1:] == (1, 0, "DevOps") and rows["Cloud"][2] == 1
     assert "extraction_status" not in {r[1] for r in con.execute("PRAGMA table_info(job)")}
 
 
@@ -545,7 +557,7 @@ class WritingModel(ai.Provider):
 
     def chat(self, system, messages):
         self.seen = (system, messages)
-        return ' "A family of real-time\n object detection models." '
+        return ' "Amazon\'s serverless\n compute service." '
 
 
 def _skill(client, name):
@@ -555,16 +567,17 @@ def _skill(client, name):
 def test_describe_sends_the_place_in_the_tree(client, monkeypatch):
     model = WritingModel({})
     monkeypatch.setattr(ai.Settings, "provider", lambda self, name=None, overrides=None: model)
-    detection = _skill(client, "Object detection")
-    res = client.post("/api/ai/describe", json={"name": "YOLO", "parent_id": detection["id"]})
-    assert res.json() == {"description": "A family of real-time object detection models.", "used": "Ollama"}
+    aws = _skill(client, "AWS")
+    res = client.post("/api/ai/describe", json={"name": "Lambda", "parent_id": aws["id"]})
+    assert res.json() == {"description": "Amazon's serverless compute service.", "used": "Ollama"}
     prompt = model.seen[1][0]["content"]
-    assert prompt.startswith("Skill: YOLO\n") and "Computer vision › Object detection" in prompt
+    assert prompt.startswith("Skill: Lambda\n") and "Technologies › Cloud › AWS" in prompt
     assert "Under it" not in prompt
     # Editing a node: what is under it goes too.
-    vision = _skill(client, "Computer vision")
-    client.post("/api/ai/describe", json={"name": "Computer vision", "parent_id": vision["parent_id"], "skill_id": vision["id"]})
-    assert "Under it: Object detection" in model.seen[1][0]["content"]
+    cloud = _skill(client, "Cloud")
+    client.post("/api/ai/describe", json={"name": "Cloud", "is_group": True, "parent_id": cloud["parent_id"], "skill_id": cloud["id"]})
+    assert model.seen[1][0]["content"].startswith("Group: Cloud\n")
+    assert "Under it: AWS, Azure, Google Cloud" in model.seen[1][0]["content"]
 
 
 def test_no_ai_cant_describe(client):

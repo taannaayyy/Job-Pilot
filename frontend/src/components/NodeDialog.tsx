@@ -83,7 +83,7 @@ export default function NodeDialog({ title, initial, pickKind, onSave, onRemove,
           <p className="muted small-note">
             {fields.isGroup
               ? "A group only organizes the tree, like Cloud. Postings are counted on the skills in it."
-              : "A skill is something postings ask for, like YOLO. It can hold other skills too."}
+              : "A skill is something postings ask for, like Docker. It can hold other skills too."}
           </p>
         )}
         <label>
