@@ -66,8 +66,6 @@ export const api = {
     request<RoleGroup>(`/role-groups/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
   deleteGroup: (id: number) => request<void>(`/role-groups/${id}`, { method: "DELETE" }),
   skillGap: (groupId: number | null) => request<SkillGap>(`/skill-gap${groupQuery(groupId)}`),
-  extractAll: (groupId: number | null) =>
-    request<SkillGap>(`/skill-gap/extract${groupQuery(groupId)}`, { method: "POST", body: "{}" }),
   getSkill: (id: number, groupId: number | null) => request<SkillDetail>(`/skills/${id}${groupQuery(groupId)}`),
   updateSkill: (
     id: number,
@@ -85,8 +83,9 @@ export const api = {
     groupId: number | null,
   ) =>
     request<SkillDetail>(`/skills/${id}${groupQuery(groupId)}`, { method: "PATCH", body: JSON.stringify(body) }),
-  addRequirement: (jobId: number, name: string, importance: Importance) =>
-    request<JobDetail>(`/jobs/${jobId}/requirements`, { method: "POST", body: JSON.stringify({ name, importance }) }),
+  /** evidence: the words in the description it was picked from; they stay highlighted there. */
+  addRequirement: (jobId: number, name: string, importance: Importance, evidence = "") =>
+    request<JobDetail>(`/jobs/${jobId}/requirements`, { method: "POST", body: JSON.stringify({ name, importance, evidence }) }),
   setRequirementImportance: (jobId: number, id: number, importance: Importance) =>
     request<JobDetail>(`/jobs/${jobId}/requirements/${id}`, { method: "PATCH", body: JSON.stringify({ importance }) }),
   removeRequirement: (jobId: number, id: number) =>
@@ -97,11 +96,17 @@ export const api = {
   deleteSkill: (id: number) => request<SkillRow[]>(`/skills/${id}`, { method: "DELETE" }),
   chat: (messages: { role: "user" | "assistant"; content: string }[], provider?: AIProvider) =>
     request<{ reply: string; used: string }>("/ai/chat", { method: "POST", body: JSON.stringify({ messages, provider }) }),
-  extractJob: (jobId: number) => request<JobDetail>(`/jobs/${jobId}/extract`, { method: "POST", body: "{}" }),
+  /** The user says this posting asks for this skill; evidence: the line in the posting. */
+  connectJob: (skillId: number, jobId: number, evidence: string, groupId: number | null) =>
+    request<SkillDetail>(`/skills/${skillId}/jobs${groupQuery(groupId)}`, { method: "POST", body: JSON.stringify({ job_id: jobId, evidence }) }),
+  updateConnection: (skillId: number, jobId: number, body: { evidence?: string; importance?: Importance }, groupId: number | null) =>
+    request<SkillDetail>(`/skills/${skillId}/jobs/${jobId}${groupQuery(groupId)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  disconnectJob: (skillId: number, jobId: number, groupId: number | null) =>
+    request<SkillDetail>(`/skills/${skillId}/jobs/${jobId}${groupQuery(groupId)}`, { method: "DELETE" }),
 
   getAISettings: () => request<AISettings>("/ai/settings"),
   saveAISettings: (body: AIBody) => request<AISettings>("/ai/settings", { method: "PUT", body: JSON.stringify(body) }),
   listModels: (body: AIBody) => request<{ models: string[] }>("/ai/models", { method: "POST", body: JSON.stringify(body) }),
   testAI: (body: AIBody) =>
-    request<{ used: string; seconds: number; found: string[] }>("/ai/test", { method: "POST", body: JSON.stringify(body) }),
+    request<{ used: string; seconds: number; reply: string }>("/ai/test", { method: "POST", body: JSON.stringify(body) }),
 };

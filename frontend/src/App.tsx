@@ -159,6 +159,8 @@ export default function App() {
   const [modeFilter, setModeFilter] = useState<WorkMode | "">("");
   const [typeFilter, setTypeFilter] = useState<JobType | "">("");
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("");
+  // Shows the jobs kept only to study a role, which the board leaves out.
+  const [studyOnly, setStudyOnly] = useState(false);
   // null: closed; otherwise the job form is open, prefilled with these fields.
   const [newJob, setNewJob] = useState<Partial<JobInput> | null>(null);
   const [creatingOrg, setCreatingOrg] = useState(false);
@@ -225,10 +227,12 @@ export default function App() {
 
   // Jobs kept only to study a role stay off the job board.
   const boardJobs = useMemo(() => jobs.filter((j) => !j.study_only), [jobs]);
+  const studyJobs = useMemo(() => jobs.filter((j) => j.study_only), [jobs]);
+  const shownJobs = studyOnly ? studyJobs : boardJobs;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("tr");
-    return boardJobs.filter(
+    return shownJobs.filter(
       (j) =>
         (!statusFilter || j.status === statusFilter) &&
         (!modeFilter || j.work_mode === modeFilter) &&
@@ -237,7 +241,7 @@ export default function App() {
         (!q ||
           [j.company, j.title, j.city, j.district].some((v) => v?.toLocaleLowerCase("tr").includes(q))),
     );
-  }, [boardJobs, query, statusFilter, modeFilter, typeFilter, locationFilter]);
+  }, [shownJobs, query, statusFilter, modeFilter, typeFilter, locationFilter]);
 
   const changeStatus = useCallback(
     async (id: number, status: Status) => {
@@ -414,6 +418,12 @@ export default function App() {
             </optgroup>
             <option value="other">Other cities</option>
           </select>
+          {(studyOnly || studyJobs.length > 0) && (
+            <label className="check-chip" title="Show only the jobs kept to study a role, which the board leaves out">
+              <input type="checkbox" checked={studyOnly} onChange={(e) => setStudyOnly(e.target.checked)} />
+              Study only · {studyJobs.length}
+            </label>
+          )}
         </div>
       )}
 
@@ -469,7 +479,7 @@ export default function App() {
         />
       ) : (
         <main>
-          {boardJobs.length === 0 ? (
+          {jobs.length === 0 ? (
             <div className="empty hero">
               <span className="logo big" aria-hidden>
                 <BoardIcon />
@@ -482,7 +492,7 @@ export default function App() {
           ) : view === "board" ? (
             <Board
               jobs={filtered}
-              showInbox={boardJobs.some((j) => j.status === "inbox")}
+              showInbox={shownJobs.some((j) => j.status === "inbox")}
               statusFilter={statusFilter}
               onOpen={setOpenId}
               onStatusChange={changeStatus}
@@ -544,8 +554,12 @@ export default function App() {
           onClose={() => setOpenId(null)}
           onSaved={upsertJob}
           onDeleted={(id) => {
+            // Companies, role groups and Skill Gap each hold their own copy of the job.
             setJobs((prev) => prev.filter((j) => j.id !== id));
             setOpenId(null);
+            refreshOrgs();
+            refreshGroups();
+            setGapVersion((v) => v + 1);
           }}
           onWatchChanged={refreshOrgs}
           groups={groups}

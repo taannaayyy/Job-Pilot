@@ -14,7 +14,8 @@ a = Analysis(
         # The Chrome extension, copied out by "Show extension folder" in the app.
         (str(ROOT / "extension"), "jobpilot/extension"),
     ],
-    hiddenimports=["jobpilot.models"],
+    # Imported only by migration scripts, which PyInstaller doesn't see.
+    hiddenimports=["jobpilot.models", "jobpilot.skills", "jobpilot.taxonomy"],
     excludes=["tkinter", "uvloop", "httptools", "watchfiles", "websockets"],
 )
 pyz = PYZ(a.pure)

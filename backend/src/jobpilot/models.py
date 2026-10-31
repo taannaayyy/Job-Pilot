@@ -61,13 +61,6 @@ class SkillMark(StrEnum):
     IGNORE = "ignore"  # "I don't want roles that need this"
 
 
-class ExtractionStatus(StrEnum):
-    PENDING = "pending"
-    RUNNING = "running"
-    DONE = "done"
-    FAILED = "failed"
-
-
 # Jobs still going somewhere; counted as "active" on the watchlist.
 ACTIVE_STATUSES = {"inbox", "saved", "applied", "screening", "interview", "awaiting", "offer"}
 
@@ -123,17 +116,12 @@ class Job(Base):
     date_applied: Mapped[datetime | None] = mapped_column(UTCDateTime)
     # The same LinkedIn job is never saved twice.
     linkedin_job_id: Mapped[str | None] = mapped_column(String(20), unique=True, index=True)
-    # Job description as captured from the posting (or pasted), for the extraction step.
+    # Job description as captured from the posting (or pasted), kept to read while connecting skills.
     raw_text: Mapped[str | None] = mapped_column(Text)
     # Skill Gap: the role group this job is a target of. Status doesn't matter.
     target_group_id: Mapped[int | None] = mapped_column(ForeignKey("role_group.id", ondelete="SET NULL"), index=True)
     # Kept only to study the role: not shown on the job board.
     study_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-    extraction_status: Mapped[ExtractionStatus | None] = mapped_column(String(10))
-    extraction_error: Mapped[str | None] = mapped_column(String(500))
-    extracted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
-    # "Dictionary + Ollama qwen2.5:3b"
-    extracted_with: Mapped[str | None] = mapped_column(String(200))
 
     company: Mapped[Company] = relationship(back_populates="jobs", lazy="joined")
     events: Mapped[list["StatusEvent"]] = relationship(
@@ -218,13 +206,8 @@ class Requirement(Base):
     max_years: Mapped[int | None] = mapped_column()
     # Degrees: the fields of study accepted ("Computer Engineering, Statistics").
     detail: Mapped[str | None] = mapped_column(String(500))
-    # "dictionary", "model", "user" (added or edited by the user) or "removed" (by the user; kept so
-    # reading the description again doesn't bring it back). Extraction never touches the last two.
+    # "user"; "dictionary" and "model" for ones made when the app still read job descriptions.
     source: Mapped[str] = mapped_column(String(20))
-
-    @property
-    def active(self) -> bool:
-        return self.source != "removed"
 
     job: Mapped[Job] = relationship(back_populates="requirements")
     skill: Mapped[Skill] = relationship(back_populates="requirements", lazy="joined")

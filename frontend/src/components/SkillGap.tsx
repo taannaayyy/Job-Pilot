@@ -3,7 +3,7 @@ import { api } from "../api";
 import { buildMap, findNode, UNSORTED, type MapNode, type MapSort } from "../skillmap";
 import { children, descendants, flat, moved } from "../tree";
 import type { RoleGroup, SkillGap as Gap } from "../types";
-import { PlusIcon, RefreshIcon, SearchIcon, SparkIcon } from "./Icons";
+import { PlusIcon, SearchIcon, SparkIcon } from "./Icons";
 import MultiFilter from "./MultiFilter";
 import NodeDialog, { type NodeFields } from "./NodeDialog";
 import Segmented from "./Segmented";
@@ -51,6 +51,7 @@ interface Props {
   filters: GapFilters;
   onFiltersChange: (filters: GapFilters) => void;
   onOpenJob: (id: number) => void;
+  /** The AI settings, for the Recommendations chat. */
   onOpenAI: () => void;
   /** Changes whenever something outside this page may have changed the gap list. */
   refreshKey: number;
@@ -95,12 +96,6 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
     load();
   }, [load, refreshKey]);
 
-  // While descriptions are being read, the list fills in by itself.
-  useEffect(() => {
-    if (!gap?.pending) return;
-    const timer = setInterval(load, 3000);
-    return () => clearInterval(timer);
-  }, [gap?.pending, load]);
 
   // A deleted group can't stay selected.
   useEffect(() => {
@@ -183,7 +178,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
     }
     setDialog(null);
   };
-  const total = gap?.extracted || gap?.targets || 0;
+  const total = gap?.targets ?? 0;
   const select = (key: string) => set({ selected: key });
 
   // The top two levels of the tree, each with how many asked-for skills are in it.
@@ -222,7 +217,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
   // The chat takes the details' place while it is open; it stays mounted, so the conversation stays.
   const side = (
     <>
-      <SkillChat hidden={!chatOpen} onClose={() => setChatOpen(false)} />
+      <SkillChat hidden={!chatOpen} onClose={() => setChatOpen(false)} onOpenSettings={onOpenAI} />
       {!chatOpen && (
         <MapDetails
           node={selectedNode}
@@ -231,6 +226,8 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           roleGroupId={groupId}
           onSelect={select}
           onOpenJob={onOpenJob}
+          onChanged={load}
+          tree={nodes}
         />
       )}
     </>
@@ -312,10 +309,6 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           </>
         )}
         <span className="spacer" />
-        <button onClick={onOpenAI} title="Choose the AI model that reads job descriptions">
-          <SparkIcon />
-          AI model
-        </button>
         <label className="search compact">
           <SearchIcon />
           <input type="search" placeholder="Search skills" value={query} onChange={(e) => set({ query: e.target.value })} />
@@ -385,35 +378,8 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
               <span className="muted map-status">
                 {gap.targets === 0
                   ? `No target jobs${selected ? ` in ${selected.name}` : ""} yet: choose a role group under Skill Gap on any job`
-                  : `${gap.extracted} of ${gap.targets} posting${gap.targets === 1 ? "" : "s"} read`}
+                  : `${gap.targets} target posting${gap.targets === 1 ? "" : "s"}`}
               </span>
-              {gap.pending > 0 && (
-                <span className="chip accent">
-                  <span className="spinner tiny" /> Reading {gap.pending}…
-                </span>
-              )}
-              {gap.without_text > 0 && (
-                <span className="chip warn" title="Open the job and paste its description">
-                  {gap.without_text} without a description
-                </span>
-              )}
-              {gap.failed > 0 && <span className="chip warn">{gap.failed} couldn't be read</span>}
-              {gap.targets > 0 && (
-                <button
-                  className="small"
-                  title="Read every target's description again, e.g. after changing the model. Uses one model call per target."
-                  onClick={async () => {
-                    try {
-                      setGap(await api.extractAll(groupId));
-                    } catch (e) {
-                      setError((e as Error).message);
-                    }
-                  }}
-                >
-                  <RefreshIcon />
-                  Read again
-                </button>
-              )}
             </div>
 
             {roots.length === 0 ? (

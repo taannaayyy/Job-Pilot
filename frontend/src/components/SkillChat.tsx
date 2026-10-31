@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../api";
 import type { AIProvider } from "../types";
-import { CloseIcon, SendIcon, SparkIcon } from "./Icons";
+import { CloseIcon, SendIcon, SettingsIcon, SparkIcon } from "./Icons";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -92,7 +92,7 @@ function Markdown({ text }: { text: string }) {
 }
 
 /** The recommendation chat about the tree; kept mounted while hidden, so the conversation stays. */
-export default function SkillChat({ hidden, onClose }: { hidden: boolean; onClose: () => void }) {
+export default function SkillChat({ hidden, onClose, onOpenSettings }: { hidden: boolean; onClose: () => void; onOpenSettings: () => void }) {
   const [provider, setProvider] = useState<AIProvider>("claude_code");
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
@@ -139,6 +139,9 @@ export default function SkillChat({ hidden, onClose }: { hidden: boolean; onClos
             </option>
           ))}
         </select>
+        <button type="button" className="icon" title="AI settings: models, keys" aria-label="AI settings" onClick={onOpenSettings}>
+          <SettingsIcon />
+        </button>
         <button type="button" className="icon" aria-label="Close recommendations" onClick={onClose}>
           <CloseIcon />
         </button>

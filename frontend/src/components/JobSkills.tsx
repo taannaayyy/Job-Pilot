@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, type JobChanges } from "../api";
-import { fmtDateTime } from "../format";
-import type { Importance, JobDetail, Requirement, RoleGroup } from "../types";
-import { CloseIcon, PlusIcon, RefreshIcon } from "./Icons";
+import type { Importance, JobDetail, Requirement, RoleGroup, SkillRow } from "../types";
+import { CloseIcon } from "./Icons";
+import Segmented from "./Segmented";
+import SkillSearch, { type SearchPick } from "./SkillSearch";
 
 interface Props {
   job: JobDetail;
@@ -10,24 +11,41 @@ interface Props {
   onChange: (job: JobDetail) => void;
   onGroupsChanged: () => void;
   onError: (message: string | null) => void;
+  /** Words selected in the description to add as a skill: searched for, and kept with the skill. */
+  words: { text: string } | null;
+  onWordsUsed: () => void;
 }
 
 const NEW_GROUP = "new";
 
-/** The job's part in Skill Gap: which role group it is a target of, and what it requires. */
-export default function JobSkills({ job, groups, onChange, onGroupsChanged, onError }: Props) {
+/** The job's part in Skill Gap: which role group it is a target of, and the skills it asks for,
+ *  connected by hand (here, or from a skill on the Skill Gap page). */
+export default function JobSkills({ job, groups, onChange, onGroupsChanged, onError, words, onWordsUsed }: Props) {
   const [newGroup, setNewGroup] = useState<string | null>(null);
-  const [text, setText] = useState<string | null>(null); // the description being edited
-  const [adding, setAdding] = useState("");
+  const [query, setQuery] = useState("");
   const [addImportance, setAddImportance] = useState<Importance>("must");
-  const reading = job.extraction_status === "pending" || job.extraction_status === "running";
-
-  // The requirements appear by themselves once the description has been read.
+  // The whole tree, to search when adding a skill.
+  const [tree, setTree] = useState<SkillRow[]>([]);
+  const loadTree = () => api.listSkills().then(setTree, () => {});
   useEffect(() => {
-    if (!reading) return;
-    const timer = setInterval(() => api.getJob(job.id).then(onChange, () => {}), 2500);
-    return () => clearInterval(timer);
-  }, [reading, job.id, onChange]);
+    loadTree();
+  }, []);
+
+  // Words selected in the description: searched for at once, the user picks the skill they name.
+  useEffect(() => {
+    if (words) setQuery(words.text);
+  }, [words]);
+
+  const add = async (pick: SearchPick) => {
+    if ("top" in pick) return;
+    const name = "skill" in pick ? pick.skill.name : pick.name;
+    const evidence = words?.text ?? "";
+    if (await run(() => api.addRequirement(job.id, name, addImportance, evidence))) {
+      setQuery("");
+      onWordsUsed();
+      if (!("skill" in pick)) loadTree(); // a new one, in Unsorted
+    }
+  };
 
   const run = async (action: () => Promise<JobDetail>) => {
     try {
@@ -135,60 +153,32 @@ export default function JobSkills({ job, groups, onChange, onGroupsChanged, onEr
 
       {job.target_group_id !== null && (
         <>
-          {!job.raw_text || text !== null ? (
-            <div className="paste">
-              <textarea
-                rows={6}
-                value={text ?? ""}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Paste the job description here. The requirements are read from it."
-              />
-              <div className="actions">
-                {text !== null && job.raw_text && (
-                  <button type="button" onClick={() => setText(null)}>
-                    Cancel
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={!text?.trim()}
-                  onClick={async () => {
-                    if (await update({ raw_text: text })) setText(null);
-                  }}
-                >
-                  Save description
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="extract-status">
-              {reading ? (
-                <>
-                  <span className="spinner tiny dark" /> Reading the description…
-                </>
-              ) : job.extraction_status === "failed" ? (
-                <span className="err">{job.extraction_error ?? "Couldn't read the description."}</span>
-              ) : job.extracted_at ? (
-                <span className="muted">
-                  Read with {job.extracted_with} · {fmtDateTime(job.extracted_at)}
-                  {job.extraction_error && <span className="warn-text"> · {job.extraction_error}</span>}
-                </span>
-              ) : null}
-              <span className="spacer" />
-              <button type="button" className="link quiet" onClick={() => setText(job.raw_text ?? "")}>
-                Edit description
-              </button>
-              <button
-                type="button"
-                className="link quiet"
-                disabled={reading}
-                onClick={() => run(() => api.extractJob(job.id))}
-              >
-                <RefreshIcon /> Read again
-              </button>
-            </div>
-          )}
+          <div className="req-add">
+            <SkillSearch
+              skills={tree}
+              query={query}
+              onQuery={setQuery}
+              onPick={add}
+              onCancel={() => {
+                setQuery("");
+                onWordsUsed();
+              }}
+              placeholder="Add a skill it asks for: search your tree"
+              mode="skill"
+              autoFocus={words !== null}
+              key={words ? `w${words.text}` : "search"}
+            />
+            <Segmented
+              ariaLabel="Must or nice to have"
+              value={addImportance}
+              onChange={setAddImportance}
+              options={[
+                { value: "must", label: "Must" },
+                { value: "nice", label: "Nice" },
+              ]}
+            />
+          </div>
+          {words && <p className="muted small-note">Pick the skill “{words.text}” names, or add it as a new one.</p>}
 
           {job.requirements.length > 0 && (
             <div className="reqs">
@@ -204,37 +194,6 @@ export default function JobSkills({ job, groups, onChange, onGroupsChanged, onEr
                   <ul className="req-list">{nice.map(chip)}</ul>
                 </>
               )}
-            </div>
-          )}
-
-          {job.raw_text && (
-            <div className="req-add">
-              <input
-                value={adding}
-                maxLength={200}
-                placeholder="Add a requirement it missed"
-                onChange={(e) => setAdding(e.target.value)}
-                onKeyDown={async (e) => {
-                  if (e.key === "Enter" && adding.trim()) {
-                    e.preventDefault();
-                    if (await run(() => api.addRequirement(job.id, adding.trim(), addImportance))) setAdding("");
-                  }
-                }}
-              />
-              <select value={addImportance} onChange={(e) => setAddImportance(e.target.value as Importance)}>
-                <option value="must">Must</option>
-                <option value="nice">Nice</option>
-              </select>
-              <button
-                type="button"
-                disabled={!adding.trim()}
-                onClick={async () => {
-                  if (await run(() => api.addRequirement(job.id, adding.trim(), addImportance))) setAdding("");
-                }}
-              >
-                <PlusIcon />
-                Add
-              </button>
             </div>
           )}
         </>

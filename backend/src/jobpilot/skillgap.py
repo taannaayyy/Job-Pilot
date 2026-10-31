@@ -1,5 +1,5 @@
-"""Skill Gap: role groups, the requirements of their target jobs added up, the user's own marks,
-and the AI settings that extraction uses."""
+"""Skill Gap: role groups, the skill tree, the skills the user connects to each target job added
+up, and the AI settings the Recommendations chat uses."""
 
 import time
 from collections import defaultdict
@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from jobpilot import ai, extraction, skills
-from jobpilot.api import _get_job, _to_out, get_session, queue_extraction, start_extraction
+from jobpilot import ai, skills
+from jobpilot.api import _get_job, _to_out, get_session
 from jobpilot.capture import require_app_page
 from jobpilot.models import (
-    ExtractionStatus, Importance, Job, Requirement, RoleGroup, Skill, SkillEvent, SkillMark,
+    Importance, Job, Requirement, RoleGroup, Skill, SkillEvent, SkillMark,
 )
 from jobpilot.schemas import JobDetail
 
@@ -82,6 +82,24 @@ def delete_group(group_id: int, session: Session = Depends(get_session)):
     return Response(status_code=204)
 
 
+def find_skill(session: Session, key: str) -> Skill | None:
+    """The skill with this key now, or before the user renamed it."""
+    return session.scalar(select(Skill).where(Skill.key == key)) or session.scalar(
+        select(Skill).where(Skill.old_keys.contains(f"\n{key}\n"))
+    )
+
+
+def get_or_create_skill(session: Session, name: str) -> Skill:
+    """The skill with this name; a new one waits in Unsorted."""
+    name = " ".join(name.split())
+    skill = find_skill(session, skills.skill_key(name))
+    if skill is None:
+        skill = Skill(name=name, key=skills.skill_key(name))
+        session.add(skill)
+        session.flush()
+    return skill
+
+
 def _missing(what: str):
     raise HTTPException(404, f"{what} not found")
 
@@ -133,11 +151,6 @@ class Posting(BaseModel):
 
 class GapOut(BaseModel):
     targets: int
-    # Targets whose requirements are known, still being read, failed, or have no description to read.
-    extracted: int
-    pending: int
-    failed: int
-    without_text: int
     # Share of the targets' requirements (must counted double) the user has; ignored skills left out.
     coverage: float | None
     skills: list[SkillRow]
@@ -159,8 +172,6 @@ def skill_gap(group_id: int | None = None, session: Session = Depends(get_sessio
     covered = total = 0
     for job in targets:
         for req in job.requirements:
-            if not req.active:
-                continue
             skill = req.skill
             row = rows.get(skill.id) or rows.setdefault(skill.id, _row(skill))
             row.jobs += 1
@@ -179,22 +190,8 @@ def skill_gap(group_id: int | None = None, session: Session = Depends(get_sessio
     # The whole tree, so the page can show (and edit) it; nodes no target asks for count 0.
     for skill in session.scalars(select(Skill).where(Skill.placed.is_(True))):
         rows.setdefault(skill.id, _row(skill))
-    status = defaultdict(int)
-    for job in targets:
-        if not job.raw_text:
-            status["without_text"] += 1
-        elif job.extraction_status == ExtractionStatus.DONE:
-            status["extracted"] += 1
-        elif job.extraction_status == ExtractionStatus.FAILED:
-            status["failed"] += 1
-        else:
-            status["pending"] += 1
     return GapOut(
         targets=len(targets),
-        extracted=status["extracted"],
-        pending=status["pending"],
-        failed=status["failed"],
-        without_text=status["without_text"],
         coverage=covered / total if total else None,
         skills=sorted(rows.values(), key=lambda r: (-r.jobs, -r.must, r.name.casefold())),
                 postings=[Posting(id=j.id, title=j.title, company=j.company.name) for j in targets],
@@ -232,7 +229,7 @@ class SkillDetail(BaseModel):
 def _skill_detail(skill: Skill, group_id: int | None) -> SkillDetail:
     reqs = [
         r for r in skill.requirements
-        if r.active and r.job.target_group_id is not None and (group_id is None or r.job.target_group_id == group_id)
+        if r.job.target_group_id is not None and (group_id is None or r.job.target_group_id == group_id)
     ]
     return SkillDetail(
         id=skill.id, name=skill.name, description=skill.description, parent_id=skill.parent_id, placed=skill.placed,
@@ -318,7 +315,7 @@ def update_skill(skill_id: int, body: SkillUpdate, group_id: int | None = None, 
         skill.description = changes["description"].strip()
     if changes.get("name") and (name := " ".join(changes["name"].split())) != skill.name:
         key = skills.skill_key(name)
-        other = extraction.find_skill(session, key)
+        other = find_skill(session, key)
         if other is not None and other.id != skill.id:
             raise HTTPException(409, f"There is already a skill called {other.name}")
         if key != skill.key:
@@ -339,7 +336,7 @@ def _asked(session: Session) -> dict[int, int]:
     return dict(session.execute(
         select(Requirement.skill_id, func.count())
         .join(Job, Job.id == Requirement.job_id)
-        .where(Requirement.source != "removed", Job.target_group_id.is_not(None))
+        .where(Job.target_group_id.is_not(None))
         .group_by(Requirement.skill_id)
     ).all())
 
@@ -378,13 +375,13 @@ def add_skill(body: SkillIn, session: Session = Depends(get_session)):
     """A skill or group the user adds to the tree (an existing skill with that name is moved there)."""
     name = " ".join(body.name.split())
     if body.is_group:
-        if (other := extraction.find_skill(session, skills.skill_key(name))) is not None:
+        if (other := find_skill(session, skills.skill_key(name))) is not None:
             raise HTTPException(409, f"There is already a skill called {other.name}")
         skill = Skill(name=name, key=skills.skill_key(name), is_group=True)
         session.add(skill)
         session.flush()
     else:
-        skill = extraction.get_or_create_skill(session, name)
+        skill = get_or_create_skill(session, name)
     if body.description.strip():
         skill.description = body.description.strip()
     _place(session, skill, body.parent_id, body.index)
@@ -394,15 +391,73 @@ def add_skill(body: SkillIn, session: Session = Depends(get_session)):
 
 @router.delete("/skills/{skill_id}", response_model=list[SkillRow])
 def remove_skill(skill_id: int, session: Session = Depends(get_session)):
-    """Takes a skill out of the tree (its children take its place), and off every job that asks for it."""
+    """Takes a skill out of the tree (its children take its place), and off every job connected to it."""
     skill = session.get(Skill, skill_id) or _missing("Skill")
     _unplace(session, skill)
-    for req in skill.requirements:
-        req.source = "removed"  # remembered, so reading the description again doesn't add it back
-    if not skill.requirements:
-        session.delete(skill)
+    session.delete(skill)
     session.commit()
     return list_skills(session)
+
+
+# ---- Connecting a skill to the postings that ask for it
+
+
+class ConnectIn(BaseModel):
+    job_id: int
+    # The line in the posting that asks for it ("3+ years with YOLO").
+    evidence: str = Field(default="", max_length=500)
+    importance: Importance = Importance.MUST
+
+
+class ConnectionUpdate(BaseModel):
+    evidence: str | None = Field(default=None, max_length=500)
+    importance: Importance | None = None
+
+
+def _connectable(session: Session, skill_id: int, job_id: int) -> tuple[Skill, Job]:
+    skill = session.get(Skill, skill_id) or _missing("Skill")
+    if skill.is_group:
+        raise HTTPException(422, f"{skill.name} is a group: connect postings to the skills in it")
+    job = session.get(Job, job_id) or _missing("Job")
+    return skill, job
+
+
+@router.post("/skills/{skill_id}/jobs", response_model=SkillDetail, status_code=201)
+def connect_job(skill_id: int, body: ConnectIn, group_id: int | None = None, session: Session = Depends(get_session)):
+    """The user says this posting asks for this skill."""
+    skill, job = _connectable(session, skill_id, body.job_id)
+    if job.target_group_id is None:
+        raise HTTPException(422, f"{job.title} isn't a target yet: choose a role group for it first")
+    req = next((r for r in job.requirements if r.skill_id == skill.id), None)
+    if req is None:
+        req = Requirement(skill=skill, importance=body.importance, source="user")
+        job.requirements.append(req)
+    req.evidence = body.evidence.strip() or req.evidence
+    session.commit()
+    return _skill_detail(skill, group_id)
+
+
+@router.patch("/skills/{skill_id}/jobs/{job_id}", response_model=SkillDetail)
+def update_connection(skill_id: int, job_id: int, body: ConnectionUpdate, group_id: int | None = None,
+                      session: Session = Depends(get_session)):
+    skill, job = _connectable(session, skill_id, job_id)
+    req = next((r for r in job.requirements if r.skill_id == skill.id), None) or _missing("Connection")
+    if body.evidence is not None:
+        req.evidence = body.evidence.strip() or None
+    if body.importance is not None:
+        req.importance = body.importance
+    session.commit()
+    return _skill_detail(skill, group_id)
+
+
+@router.delete("/skills/{skill_id}/jobs/{job_id}", response_model=SkillDetail)
+def disconnect_job(skill_id: int, job_id: int, group_id: int | None = None, session: Session = Depends(get_session)):
+    skill = session.get(Skill, skill_id) or _missing("Skill")
+    for req in [r for r in skill.requirements if r.job_id == job_id]:
+        session.delete(req)
+    session.commit()
+    session.refresh(skill)
+    return _skill_detail(skill, group_id)
 
 
 # ---- Recommendations for the tree
@@ -412,8 +467,7 @@ def tree_text(session: Session) -> str:
     """The whole tree, with how many jobs ask for each skill, then Unsorted, for the model."""
     asked = defaultdict(int)
     for req in session.scalars(select(Requirement)):
-        if req.active:
-            asked[req.skill_id] += 1
+        asked[req.skill_id] += 1
     all_skills = session.scalars(select(Skill).order_by(Skill.position, Skill.id)).all()
     children: dict[int | None, list[Skill]] = defaultdict(list)
     for s in all_skills:
@@ -441,20 +495,19 @@ def tree_text(session: Session) -> str:
 
 
 CHAT_SYSTEM = """You help the user organize the skill tree of their job-search app (Job Pilot).
-The app reads job postings the user is aiming for and counts how many ask for each skill in this tree, so the
-user can see which areas they need to work on. The user designs the tree, from general to specific: a node is a
-skill (which can hold other skills) or a [group], which only organizes and is never asked for itself, and a
-node counts the postings that ask for it or for anything under it. The AI model that reads
-postings sees the tree too and writes each skill the way the tree names it; skills the tree doesn't have wait
-in Unsorted.
+The user connects the skills in this tree to the job postings they are aiming for, and the app counts how
+many postings ask for each skill, so the user can see which areas they need to work on. The user designs
+the tree, from general to specific: a node is a skill (which can hold other skills) or a [group], which only
+organizes and is never asked for itself, and a node counts the postings that ask for it or for anything
+under it. Skills not placed in the tree yet wait in Unsorted.
 
 The user's tree, with how many jobs ask for each skill:
 
 {tree}
 
 Recommend concrete changes: where skills in Unsorted belong (or that they should go), skills and groups to
-add, rename, split, merge, move or delete, and duplicates to merge. Use the exact names from the tree, keep it short, and
-order by impact. The user makes the changes in the app themselves."""
+add, rename, split, merge, move or delete, and duplicates to merge. Use the exact names from the tree, keep
+it short, and order by impact. The user makes the changes in the app themselves."""
 
 
 class ChatMessage(BaseModel):
@@ -477,7 +530,7 @@ def chat(body: ChatIn, request: Request, session: Session = Depends(get_session)
     """One turn of the recommendation chat; the whole tree goes with every turn."""
     provider = _settings(request).provider(body.provider)
     if provider.name == "none":
-        raise HTTPException(422, "Choose an AI model for this: the dictionary can't give recommendations.")
+        raise HTTPException(422, "Choose an AI model for this: Recommendations need one.")
     try:
         reply = provider.chat(CHAT_SYSTEM.format(tree=tree_text(session)), [m.model_dump() for m in body.messages])
     except ai.AIError as e:
@@ -493,18 +546,24 @@ def chat(body: ChatIn, request: Request, session: Session = Depends(get_session)
 class RequirementIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     importance: Importance = Importance.MUST
+    # The words in the description it was picked from; they stay highlighted there.
+    evidence: str = Field(default="", max_length=500)
 
 
 @router.post("/jobs/{job_id}/requirements", response_model=JobDetail, status_code=201)
 def add_requirement(job_id: int, body: RequirementIn, session: Session = Depends(get_session)):
-    """Adds one the extraction missed. It is never replaced by a later extraction."""
+    """Connects a skill to the job, from the job's side; a name the tree doesn't have waits in Unsorted."""
     job = _get_job(session, job_id)
-    skill = extraction.get_or_create_skill(session, body.name)
+    skill = get_or_create_skill(session, body.name)
+    if skill.is_group:
+        raise HTTPException(422, f"{skill.name} is a group: add the skills in it")
+    evidence = " ".join(body.evidence.split()) or None
     existing = next((r for r in job.requirements if r.skill_id == skill.id), None)
     if existing is not None:
         existing.importance, existing.source = body.importance, "user"
+        existing.evidence = evidence or existing.evidence
     else:
-        job.requirements.append(Requirement(skill=skill, importance=body.importance, evidence=None, source="user"))
+        job.requirements.append(Requirement(skill=skill, importance=body.importance, evidence=evidence, source="user"))
     session.commit()
     return _to_out(job, JobDetail)
 
@@ -516,8 +575,8 @@ class RequirementUpdate(BaseModel):
 @router.patch("/jobs/{job_id}/requirements/{requirement_id}", response_model=JobDetail)
 def update_requirement(job_id: int, requirement_id: int, body: RequirementUpdate, session: Session = Depends(get_session)):
     job = _get_job(session, job_id)
-    req = next((r for r in job.requirements if r.id == requirement_id and r.active), None) or _missing("Requirement")
-    req.importance, req.source = body.importance, "user"  # an edited one is kept like an added one
+    req = next((r for r in job.requirements if r.id == requirement_id), None) or _missing("Requirement")
+    req.importance, req.source = body.importance, "user"
     session.commit()
     return _to_out(job, JobDetail)
 
@@ -525,34 +584,11 @@ def update_requirement(job_id: int, requirement_id: int, body: RequirementUpdate
 @router.delete("/jobs/{job_id}/requirements/{requirement_id}", response_model=JobDetail)
 def remove_requirement(job_id: int, requirement_id: int, session: Session = Depends(get_session)):
     job = _get_job(session, job_id)
-    req = next((r for r in job.requirements if r.id == requirement_id and r.active), None) or _missing("Requirement")
-    req.source = "removed"  # remembered, so reading the description again doesn't add it back
+    req = next((r for r in job.requirements if r.id == requirement_id), None) or _missing("Requirement")
+    job.requirements.remove(req)
+    session.delete(req)
     session.commit()
     return _to_out(job, JobDetail)
-
-
-@router.post("/jobs/{job_id}/extract", response_model=JobDetail)
-def extract_job(job_id: int, request: Request, session: Session = Depends(get_session)):
-    """Reads the job's description again, e.g. after choosing another model."""
-    job = _get_job(session, job_id)
-    if not job.raw_text:
-        raise HTTPException(422, "This job has no description. Paste it first.")
-    queue_extraction(job)
-    session.commit()
-    start_extraction(request, job)
-    return _to_out(job, JobDetail)
-
-
-@router.post("/skill-gap/extract", response_model=GapOut)
-def extract_all(request: Request, group_id: int | None = None, session: Session = Depends(get_session)):
-    """Reads every target of the group again."""
-    jobs = [j for j in _targets(session, group_id) if j.raw_text]
-    for job in jobs:
-        queue_extraction(job)
-    session.commit()
-    for job in jobs:
-        start_extraction(request, job)
-    return skill_gap(group_id, session)
 
 
 # ---- AI settings
@@ -564,7 +600,6 @@ class ProviderSettings(BaseModel):
     # Claude Code's program, when it isn't found by itself.
     path: str | None = Field(default=None, max_length=500)
     effort: str | None = Field(default=None, pattern="^(|" + "|".join(ai.EFFORTS) + ")$")
-    model_decides: bool | None = None
     # Write only: the key is never sent back, only whether one is saved.
     api_key: str | None = Field(default=None, max_length=500)
 
@@ -608,10 +643,6 @@ def _merge(data: dict, providers: dict[str, ProviderSettings]) -> dict:
                 continue
             if field == "api_key" and value is None:
                 continue  # blank in the form: keep the saved key (sending "" removes it)
-            if field == "model_decides":
-                if value is not None:
-                    config[field] = value
-                continue
             config[field] = (value or "").strip()
     return data
 
@@ -640,31 +671,24 @@ def list_models(body: SettingsIn, request: Request):
         raise HTTPException(422, str(e)) from e
 
 
-SAMPLE = """Requirements
-- 3+ years of experience with Python and SQL
-- Experience with PyTorch and Docker
-Nice to have
-- Kubernetes"""
-
-
 class TestOut(BaseModel):
     used: str
     seconds: float
-    found: list[str]
+    reply: str
 
 
 @router.post("/ai/test", response_model=TestOut, dependencies=[Depends(require_app_page)])
 def test_ai(body: SettingsIn, request: Request):
-    """Runs the model on a short sample posting, so the user sees it works before saving."""
+    """Asks the model for a one-line answer, so the user sees it works before saving."""
     data = _merge(_settings(request).load(), body.providers)
     provider = ai._CLASSES[body.provider](data["providers"].get(body.provider, {}))
+    if provider.name == "none":
+        raise HTTPException(422, "Choose an AI model to test.")
     started = time.monotonic()
     try:
-        items = provider.extract(SAMPLE) if provider.name != "none" else []
+        reply = provider.chat("Answer in one short sentence.", [{"role": "user", "content": "Say that you're ready."}])
     except ai.AIError as e:
         raise HTTPException(422, str(e)) from e
-    if provider.name != "none" and not items:
-        raise HTTPException(422, "The model answered but found nothing. Try a bigger model.")
-    result = extraction.extract(SAMPLE, ai.Provider({})) if provider.name == "none" else None
-    names = [i.name for i in result.items] if result else [i.name for i in items]
-    return TestOut(used=provider.describe(), seconds=round(time.monotonic() - started, 1), found=names)
+    if not reply.strip():
+        raise HTTPException(422, "The model gave an empty answer. Try another model.")
+    return TestOut(used=provider.describe(), seconds=round(time.monotonic() - started, 1), reply=reply.strip()[:300])

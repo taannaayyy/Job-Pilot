@@ -1,5 +1,5 @@
-"""The AI model that reads job descriptions, chosen by the user: none (dictionary only), a local
-model through Ollama, any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Gemini, LM Studio...),
+"""The AI model the user talks to about their skill tree (Recommendations), chosen by the user:
+none, a local model through Ollama, any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Gemini, LM Studio...),
 Claude with an API key, or Claude Code (the user's Claude subscription, no key). Settings,
 including API keys, live in a file next to the database that only the user can read."""
 
@@ -11,127 +11,28 @@ import tempfile
 import threading
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
 from pathlib import Path
 
 import anthropic
 
-from jobpilot.models import Importance
-from jobpilot import taxonomy
 
 PROVIDERS = ("none", "ollama", "openai", "anthropic", "claude_code")
 LABELS = {
-    "none": "Dictionary only", "ollama": "Ollama", "openai": "OpenAI-compatible",
+    "none": "No AI", "ollama": "Ollama", "openai": "OpenAI-compatible",
     "anthropic": "Claude", "claude_code": "Claude Code",
 }
-# model_decides: the model, not the dictionary's section rules, says whether a skill the
-# dictionary found is a must or a nice to have. Off for small local models, which judge it badly.
 DEFAULTS = {
-    "ollama": {"base_url": "http://localhost:11434", "model": "", "model_decides": False},
-    "openai": {"base_url": "https://api.openai.com/v1", "model": "", "api_key": "", "model_decides": True},
-    "anthropic": {"model": "claude-opus-5-5", "api_key": "", "model_decides": True},
+    "ollama": {"base_url": "http://localhost:11434", "model": ""},
+    "openai": {"base_url": "https://api.openai.com/v1", "model": "", "api_key": ""},
+    "anthropic": {"model": "claude-opus-5-5", "api_key": ""},
     # Empty model and effort: Claude Code's own default.
-    "claude_code": {"path": "", "model": "claude-opus-5-5", "effort": "medium", "model_decides": True},
+    "claude_code": {"path": "", "model": "claude-opus-5-5", "effort": "medium"},
 }
-TIMEOUT = 300  # local models on a laptop can take minutes for a long posting
+TIMEOUT = 300  # local models on a laptop can take minutes for a long answer
 
 
 class AIError(Exception):
     """Something the user can fix: the model isn't running, the key is wrong..."""
-
-
-@dataclass(frozen=True)
-class ModelItem:
-    name: str  # a skill of the tree, written as in the tree, or the posting's own name for it
-    importance: Importance
-    evidence: str
-    min_years: int | None = None
-    max_years: int | None = None
-    detail: str = ""
-
-
-def _nullable_int():
-    return {"anyOf": [{"type": "integer"}, {"type": "null"}]}
-
-
-def schema() -> dict:
-    return {
-        "type": "object",
-        "properties": {
-            "requirements": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string"},
-                        "importance": {"type": "string", "enum": ["must", "nice"]},
-                        "evidence": {"type": "string"},
-                        "min_years": _nullable_int(),
-                        "max_years": _nullable_int(),
-                        "detail": {"type": "string"},
-                    },
-                    "required": ["name", "importance", "evidence", "min_years", "max_years", "detail"],
-                    "additionalProperties": False,
-                },
-            }
-        },
-        "required": ["requirements"],
-        "additionalProperties": False,
-    }
-
-
-SCHEMA = schema()
-
-# The rules; the user's tree is put in front of them (prompt()).
-RULES = """Rules:
-- One item per skill or technology: "PyTorch and Hugging Face" is two items.
-- name: when the item is one of the skills in the tree, its name exactly as the tree writes it, even when the
-  posting words it differently. [Bracketed] names are groups that only organize the tree: never an item.
-  Examples: "YOLOv8" is YOLO, "relational databases" is Relational (SQL), "deep neural
-  networks" is Deep learning. Be as specific as the posting is: "YOLO experience" is YOLO, not Computer vision;
-  "computer vision" alone is Computer vision. Only when no skill in the tree is that item: the skill itself in
-  1 to 4 words, in the posting's words ("Feast", "Model documentation"). Never a sentence, never
-  "Experience with ...".
-- min_years, max_years: the years asked for this item ("3-5 years of Python": 3 and 5 on Python; "2+ years
-  with SQL": 2 and null on SQL). Years not about one skill: an item "Professional experience". Otherwise null.
-- importance: "nice" when the posting says plus, nice to have, preferred, bonus or advantage, or lists it apart
-  from the main requirements (for example after the duties); otherwise "must".
-- Degrees: one item per degree level ("Bachelor's degree", "Master's degree", "PhD") with the accepted fields of
-  study in detail. "BSc or MSc" means the Bachelor's is a must and the Master's is nice. detail is "" otherwise.
-- Only what a candidate must know or have, never the tasks of the job: "Monitor model performance" and
-  "Prepare reports" are tasks. From a task, take only a skill it names ("deploy with Docker": Docker).
-- evidence: the short phrase from the posting it comes from.
-- Leave out benefits and anything about the company itself.
-"""
-
-
-def prompt(tree: str) -> str:
-    return (
-        "List everything this job posting asks of a candidate.\n\n"
-        f"The user's skill tree (two spaces of indent are one level deeper):\n{tree.strip()}\n\n"
-        f"{RULES}\nJob posting:\n"
-    )
-
-
-def _int(value) -> int | None:
-    return value if isinstance(value, int) and 0 < value <= 30 else None
-
-
-def _parse(text: str) -> list[ModelItem]:
-    try:
-        data = json.loads(text)
-    except ValueError as e:
-        raise AIError("The model didn't answer in the expected format. Try another model.") from e
-    items = []
-    for raw in data.get("requirements", []) if isinstance(data, dict) else []:
-        if not isinstance(raw, dict) or not str(raw.get("name", "")).strip():
-            continue
-        importance = Importance.NICE if raw.get("importance") == "nice" else Importance.MUST
-        items.append(ModelItem(
-            str(raw["name"]).strip()[:200], importance, str(raw.get("evidence") or "")[:300],
-            _int(raw.get("min_years")), _int(raw.get("max_years")), str(raw.get("detail") or "").strip()[:300],
-        ))
-    return items
 
 
 def _http_json(url: str, body: dict | None = None, headers: dict | None = None, timeout: float = TIMEOUT) -> dict:
@@ -164,15 +65,8 @@ class Provider:
     def model(self) -> str:
         return self.config.get("model", "")
 
-    @property
-    def model_decides(self) -> bool:
-        return bool(self.config.get("model_decides", False))
-
     def describe(self) -> str:
         return LABELS[self.name] + (f" {self.model}" if self.model else "")
-
-    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
-        return []
 
     def chat(self, system: str, messages: list[dict]) -> str:
         """A free-form conversation (the tree recommendations). messages: [{"role", "content"}]."""
@@ -214,10 +108,8 @@ class Ollama(Provider):
             self.config = {**self.config, "model": installed[0]}
         return self.config["model"]
 
-    def _chat(self, messages: list[dict], fmt: dict | None = None) -> str:
-        body = {"model": self.model, "messages": messages, "stream": False, "options": {"temperature": 0}}
-        if fmt:
-            body["format"] = fmt
+    def _chat(self, messages: list[dict]) -> str:
+        body = {"model": self.model, "messages": messages, "stream": False}
         try:
             res = _http_json(f"{self.base}/api/chat", body)
         except urllib.error.HTTPError as e:
@@ -225,9 +117,6 @@ class Ollama(Provider):
         except OSError as e:
             raise AIError("Ollama isn't running. Open the Ollama app, or choose another model.") from e
         return res.get("message", {}).get("content", "")
-
-    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
-        return _parse(self._chat([{"role": "user", "content": prompt(tree) + text}], schema()))
 
     def chat(self, system: str, messages: list[dict]) -> str:
         return self._chat([{"role": "system", "content": system}, *messages])
@@ -272,36 +161,6 @@ class OpenAICompatible(Provider):
         except (KeyError, IndexError, TypeError) as e:
             raise AIError("The model sent an unexpected answer.") from e
 
-    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
-        if not self.model:
-            raise AIError("Choose a model in the AI settings.")
-        request, json_schema = prompt(tree), schema()
-        messages = [{"role": "user", "content": request + text}]
-        body = {
-            "model": self.model,
-            "messages": messages,
-            "response_format": {"type": "json_schema", "json_schema": {"name": "requirements", "schema": json_schema, "strict": True}},
-        }
-        try:
-            res = _http_json(f"{self.base}/chat/completions", body, self._headers())
-        except urllib.error.HTTPError as e:
-            if e.code not in (400, 422):
-                raise AIError(_http_error(e)) from e
-            # Servers without JSON schema support still take plain JSON mode.
-            body["response_format"] = {"type": "json_object"}
-            body["messages"] = [{"role": "user", "content": request + text + "\n\nAnswer with JSON matching this schema:\n" + json.dumps(json_schema)}]
-            try:
-                res = _http_json(f"{self.base}/chat/completions", body, self._headers())
-            except urllib.error.HTTPError as e2:
-                raise AIError(_http_error(e2)) from e2
-        except OSError as e:
-            raise AIError(f"Couldn't reach {self.base}") from e
-        try:
-            return _parse(res["choices"][0]["message"]["content"] or "")
-        except (KeyError, IndexError, TypeError) as e:
-            raise AIError("The model sent an unexpected answer.") from e
-
-
 class Claude(Provider):
     name = "anthropic"
 
@@ -322,12 +181,6 @@ class Claude(Provider):
 
     def chat(self, system: str, messages: list[dict]) -> str:
         return self._create(system=system, messages=messages)
-
-    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
-        return _parse(self._create(
-            messages=[{"role": "user", "content": prompt(tree) + text}],
-            output_config={"format": {"type": "json_schema", "schema": schema()}},
-        ))
 
     def _create(self, **kwargs) -> str:
         try:
@@ -353,7 +206,6 @@ class Claude(Provider):
 
 # An app opened from /Applications doesn't get the shell's PATH, so `which` alone can miss it.
 _CLAUDE_PLACES = ("~/.local/bin/claude", "~/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude")
-SYSTEM = "You read job postings and list what they require of a candidate, as structured data."
 # How long the model thinks before answering; more takes longer and uses more of the plan.
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 CLAUDE_CODE_MODELS = [
@@ -402,27 +254,19 @@ class ClaudeCode(Provider):
         self.binary()  # says so when it isn't installed
         return [m for m, _ in CLAUDE_CODE_MODELS]
 
-    def extract(self, text: str, tree: str = taxonomy.TREE) -> list[ModelItem]:
-        out = self._run(prompt(tree) + text, SYSTEM, schema())
-        if isinstance(out.get("structured_output"), dict):
-            return _parse(json.dumps(out["structured_output"]))
-        return _parse(str(out.get("result") or ""))
-
     def chat(self, system: str, messages: list[dict]) -> str:
         """Claude Code runs one prompt at a time, so the conversation so far is sent each time."""
         history = "\n\n".join(f"{'User' if m['role'] == 'user' else 'You'}: {m['content']}" for m in messages[:-1])
         text = (f"Conversation so far:\n\n{history}\n\nThe user's new message:\n\n" if history else "") + messages[-1]["content"]
         return str(self._run(text, system).get("result") or "")
 
-    def _run(self, text: str, system: str, json_schema: dict | None = None) -> dict:
+    def _run(self, text: str, system: str) -> dict:
         binary = self.binary()
         cmd = [
             binary, "-p", "--output-format", "json",
             "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence",
             "--disable-slash-commands", "--system-prompt", system,
         ]
-        if json_schema:
-            cmd += ["--json-schema", json.dumps(json_schema)]
         if self.model:
             cmd += ["--model", self.model]
         if self.config.get("effort") in EFFORTS:
@@ -452,7 +296,7 @@ def _cli_error(message: str) -> str:
     if any(w in lowered for w in ("not logged in", "log in", "login", "authenticat", "invalid api key", "oauth")):
         return "Claude Code isn't logged in. Run claude once in Terminal and log in."
     if any(w in lowered for w in ("usage limit", "rate limit", "limit reached", "out of extra usage")):
-        return "Claude Code usage limit reached. Try again later; the job can be read again then."
+        return "Claude Code usage limit reached. Try again later."
     return f"Claude Code: {text}"
 
 

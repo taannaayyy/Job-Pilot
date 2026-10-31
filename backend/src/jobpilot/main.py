@@ -5,7 +5,7 @@ from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from jobpilot import ai, capture, config, extraction, skillgap
+from jobpilot import ai, capture, config, skillgap
 from jobpilot.api import router
 from jobpilot.db import make_engine, make_sessionmaker
 from jobpilot.logos import LogoCache
@@ -33,7 +33,7 @@ def run_migrations(db_file: Path) -> None:
     command.upgrade(cfg, "head")
 
 
-def create_app(db_file: Path | None = None, inline_extraction: bool = False) -> FastAPI:
+def create_app(db_file: Path | None = None) -> FastAPI:
     db_file = db_file or config.db_path()
     engine = make_engine(db_file)
     run_migrations(db_file)
@@ -44,8 +44,6 @@ def create_app(db_file: Path | None = None, inline_extraction: bool = False) -> 
     # Key the Chrome extension must send; kept next to the database.
     app.state.token_file = db_file.parent / "extension-key"
     app.state.ai_settings = ai.Settings(db_file.parent / "ai-settings.json")
-    app.state.extractor = extraction.Worker(app.state.sessionmaker, app.state.ai_settings, inline=inline_extraction)
-    app.state.extractor.start()
     app.include_router(router)
     app.include_router(capture.router)
     app.include_router(skillgap.router)

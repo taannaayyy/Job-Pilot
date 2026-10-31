@@ -11,7 +11,7 @@ interface Props {
 }
 
 const CHOICES: { value: AIProvider; title: string; text: string }[] = [
-  { value: "none", title: "Dictionary only", text: "No AI. Finds the skills the app knows, instantly. Free." },
+  { value: "none", title: "No AI", text: "Recommendations are off." },
   { value: "ollama", title: "Local model (Ollama)", text: "Runs on this Mac. Free, and nothing leaves the computer." },
   { value: "openai", title: "OpenAI-compatible API", text: "OpenAI, OpenRouter, Groq, Gemini, Mistral, LM Studio and others." },
   { value: "anthropic", title: "Claude API", text: "Anthropic's API, with your own key." },
@@ -110,7 +110,7 @@ export default function AISettingsDialog({ onClose, onSaved }: Props) {
     setTest(null);
     try {
       const r = await api.testAI(body());
-      setTest({ ok: true, text: `${r.used} found ${r.found.join(", ")} in ${r.seconds}s.` });
+      setTest({ ok: true, text: `${r.used} answered in ${r.seconds}s: "${r.reply}"` });
     } catch (e) {
       setTest({ ok: false, text: (e as Error).message });
     } finally {
@@ -132,8 +132,7 @@ export default function AISettingsDialog({ onClose, onSaved }: Props) {
       <div className="modal" role="dialog" aria-labelledby="ai-title" onMouseDown={(e) => e.stopPropagation()}>
         <h2 id="ai-title">AI model</h2>
         <p className="modal-hint">
-          Reads your target jobs' descriptions together with the skill dictionary. The dictionary always runs; a model
-          adds the skills it doesn't know. Pick whatever you like, and change it any time.
+          Answers Recommendations about your skill tree. Pick whatever you like, and change it any time.
         </p>
 
         {!form ? (
@@ -220,7 +219,7 @@ export default function AISettingsDialog({ onClose, onSaved }: Props) {
                       placeholder="Found automatically"
                     />
                     <span className="field-note">
-                      Runs with no tools, files or settings: it only reads the posting. Needs Claude Code installed and
+                      Runs with no tools, files or settings: it only reads your tree. Needs Claude Code installed and
                       logged in.
                     </span>
                   </label>
@@ -252,21 +251,7 @@ export default function AISettingsDialog({ onClose, onSaved }: Props) {
                   ) : null}
                 </label>
                 )}
-                <label className="check wide">
-                  <input
-                    type="checkbox"
-                    checked={!!config.model_decides}
-                    onChange={(e) => set("model_decides", e.target.checked)}
-                  />
-                  <span>
-                    The model decides what's a must and what's a nice to have
-                    <span className="field-note">
-                      {" "}
-                      Otherwise the dictionary's rules do. Strong models read the posting better; small local ones often don't.
-                    </span>
-                  </span>
-                </label>
-                {CLOUD[provider] && <p className="field-note wide">Job descriptions are sent to {CLOUD[provider]}.</p>}
+                {CLOUD[provider] && <p className="field-note wide">Your skill tree is sent to {CLOUD[provider]}.</p>}
               </div>
             )}
 

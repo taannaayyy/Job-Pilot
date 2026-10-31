@@ -6,6 +6,7 @@ import { useClosing } from "../useClosing";
 import { CheckIcon, CloseIcon, ExternalIcon } from "./Icons";
 import FavoriteButton from "./FavoriteButton";
 import CompanyLogo from "./CompanyLogo";
+import JobDescription from "./JobDescription";
 import JobFields from "./JobFields";
 import JobSkills from "./JobSkills";
 import StatusSelect from "./StatusSelect";
@@ -33,6 +34,8 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [closing, close] = useClosing(onClose, 220);
+  // Words selected in the description, on their way to the skill search.
+  const [words, setWords] = useState<{ text: string } | null>(null);
 
   useEffect(() => {
     api
@@ -41,7 +44,9 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
         setJob(j);
         setInput(toInput(j));
       })
-      .catch((e) => setError(e.message));
+      // Deleted somewhere else, or still listed on a page that hadn't caught up: drop it everywhere.
+      .catch((e) => (e.message === "Job not found" ? onDeleted(jobId) : setError(e.message)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   useEffect(() => {
@@ -77,8 +82,8 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
   };
 
   return (
-    <div className={`overlay side ${closing ? "closing" : ""}`} onMouseDown={close}>
-      <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
+    <div className={`overlay ${closing ? "closing" : ""}`} onMouseDown={close}>
+      <aside className="panel job-pop" role="dialog" aria-label="Job" onMouseDown={(e) => e.stopPropagation()}>
         {!job || !input ? (
           <div className="empty">{error ?? <span className="spinner" aria-label="Loading" />}</div>
         ) : (
@@ -145,62 +150,92 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
               )}
             </div>
 
-            <JobFields value={input} onChange={setInput} />
             {error && <div className="error">{error}</div>}
 
-            <div className="actions">
-              <button
-                type="button"
-                className="danger"
-                onClick={async () => {
-                  if (!confirm(`Delete ${job.title} at ${job.company}?`)) return;
-                  try {
-                    await api.deleteJob(jobId);
-                    onDeleted(jobId);
-                  } catch (err) {
-                    setError((err as Error).message);
-                  }
-                }}
-              >
-                Delete
-              </button>
-              <span className="spacer" />
-              <button type="button" disabled={!dirty} onClick={() => setInput(toInput(job))}>
-                Revert
-              </button>
-              <button type="submit" className={`primary ${saved ? "saved" : ""}`} disabled={(!dirty || busy) && !saved}>
-                {busy ? <span className="spinner small" /> : saved ? <><CheckIcon /> Saved</> : "Save changes"}
-              </button>
+            {/* The job's own fields, out of the way of reading and adding skills. */}
+            <details className="job-details">
+              <summary>Details · company, link, location, notes, history</summary>
+              <JobFields value={input} onChange={setInput} />
+              <div className="actions">
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={async () => {
+                    if (!confirm(`Delete ${job.title} at ${job.company}?`)) return;
+                    try {
+                      await api.deleteJob(jobId);
+                      onDeleted(jobId);
+                    } catch (err) {
+                      setError((err as Error).message);
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+                <span className="spacer" />
+                <button type="button" disabled={!dirty} onClick={() => setInput(toInput(job))}>
+                  Revert
+                </button>
+                <button type="submit" className={`primary ${saved ? "saved" : ""}`} disabled={(!dirty || busy) && !saved}>
+                  {busy ? <span className="spinner small" /> : saved ? <><CheckIcon /> Saved</> : "Save changes"}
+                </button>
+              </div>
+
+              <h3>Status history</h3>
+              <ol className="history">
+                {[...job.events].reverse().map((ev) => (
+                  <li key={ev.id}>
+                    <span className={`dot status-${ev.to_status}`} />
+                    <span>
+                      {ev.from_status ? `${STATUS_LABELS[ev.from_status]} → ` : "Added as "}
+                      <strong>{STATUS_LABELS[ev.to_status]}</strong>
+                    </span>
+                    <time className="muted">{fmtDateTime(ev.timestamp)}</time>
+                  </li>
+                ))}
+              </ol>
+            </details>
+
+            {/* Read on the left, add the skills it asks for on the right. */}
+            <div className="job-pop-body">
+              <div className="job-pop-col">
+                <JobDescription
+                  text={job.raw_text}
+                  requirements={job.requirements}
+                  onSave={async (text) => {
+                    try {
+                      applySkills(await api.updateJob(jobId, { raw_text: text }));
+                      return true;
+                    } catch (err) {
+                      setError((err as Error).message);
+                      return false;
+                    }
+                  }}
+                  onAddWords={job.target_group_id !== null ? (text) => setWords({ text }) : null}
+                  onRemove={async (ids) => {
+                    try {
+                      let updated = job;
+                      for (const id of ids) updated = await api.removeRequirement(jobId, id);
+                      applySkills(updated);
+                    } catch (err) {
+                      setError((err as Error).message);
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="job-pop-col">
+                <JobSkills
+                  job={job}
+                  groups={groups}
+                  onChange={applySkills}
+                  onGroupsChanged={onGroupsChanged}
+                  onError={setError}
+                  words={words}
+                  onWordsUsed={() => setWords(null)}
+                />
+              </div>
             </div>
-
-            <JobSkills
-              job={job}
-              groups={groups}
-              onChange={applySkills}
-              onGroupsChanged={onGroupsChanged}
-              onError={setError}
-            />
-
-            <h3>Status history</h3>
-            <ol className="history">
-              {[...job.events].reverse().map((ev) => (
-                <li key={ev.id}>
-                  <span className={`dot status-${ev.to_status}`} />
-                  <span>
-                    {ev.from_status ? `${STATUS_LABELS[ev.from_status]} → ` : "Added as "}
-                    <strong>{STATUS_LABELS[ev.to_status]}</strong>
-                  </span>
-                  <time className="muted">{fmtDateTime(ev.timestamp)}</time>
-                </li>
-              ))}
-            </ol>
-
-            {job.raw_text && (
-              <details className="captured">
-                <summary>Job description (saved from the posting)</summary>
-                <div className="raw-text">{job.raw_text}</div>
-              </details>
-            )}
           </form>
         )}
       </aside>

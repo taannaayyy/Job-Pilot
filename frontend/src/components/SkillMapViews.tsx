@@ -3,7 +3,8 @@ import { api } from "../api";
 import { lineage, UNSORTED, type MapNode } from "../skillmap";
 import { children, descendants } from "../tree";
 import type { SkillDetail, SkillGap, SkillRow } from "../types";
-import { ChevronIcon, EditIcon, MinusIcon, PlusIcon, TrashIcon } from "./Icons";
+import SkillSearch from "./SkillSearch";
+import { ChevronIcon, CloseIcon, EditIcon, MinusIcon, PlusIcon, TrashIcon } from "./Icons";
 
 type Zone = "before" | "after" | "inside";
 
@@ -450,22 +451,47 @@ export function MapDetails({
   roleGroupId,
   onSelect,
   onOpenJob,
+  onChanged,
+  tree,
 }: {
   node: MapNode | null;
   total: number;
+  /** The target postings: the ones a skill can be connected to. */
   postings: SkillGap["postings"];
   roleGroupId: number | null;
   onSelect: (key: string) => void;
   onOpenJob: (id: number) => void;
+  /** A posting was connected or disconnected, or a skill placed: the counts change. */
+  onChanged: () => void;
+  /** The whole tree, to place a skill from Unsorted in. */
+  tree: SkillRow[];
 }) {
   const [detail, setDetail] = useState<SkillDetail | null>(null);
+  const [picking, setPicking] = useState<string | null>(null); // the search in the posting picker
+  const [note, setNote] = useState<{ jobId: number; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [placing, setPlacing] = useState<string | null>(null); // the search for where it belongs
   const skillId = node?.skill?.id ?? null;
 
   // A skill's postings come with the line each one asks for it in.
   useEffect(() => {
     setDetail(null);
+    setPicking(null);
+    setNote(null);
+    setPlacing(null);
+    setError(null);
     if (skillId !== null) api.getSkill(skillId, roleGroupId).then(setDetail, () => {});
   }, [skillId, roleGroupId]);
+
+  const change = async (action: () => Promise<SkillDetail>) => {
+    try {
+      setDetail(await action());
+      setError(null);
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   if (!node)
     return (
@@ -479,6 +505,17 @@ export function MapDetails({
   const quotes = new Map((detail?.jobs ?? []).map((j) => [j.job_id, j]));
   const asking = postings.filter((p) => node.jobs.has(p.id));
   const skill = node.skill;
+  // Postings are connected to skills, never to a group, which only organizes.
+  const connectable = node.kind === "skill" && skill !== undefined;
+  const named = (jobId: number) => quotes.has(jobId) || (skill?.job_ids?.includes(jobId) ?? false);
+  const q = (picking ?? "").trim().toLocaleLowerCase("tr");
+  const choices = postings.filter((p) => !named(p.id) && `${p.title} ${p.company}`.toLocaleLowerCase("tr").includes(q));
+  const saveNote = () => {
+    if (!note || !skill) return;
+    const old = quotes.get(note.jobId)?.evidence ?? "";
+    setNote(null);
+    if (note.text.trim() !== old) change(() => api.updateConnection(skill.id, note.jobId, { evidence: note.text }, roleGroupId));
+  };
   /** For a posting that doesn't name it: the skills under it that the posting names. */
   const via = (jobId: number): string[] => {
     const names: string[] = [];
@@ -510,6 +547,35 @@ export function MapDetails({
             : `Asked for in ${node.jobs.size} of ${total} posting${total === 1 ? "" : "s"}`}
           {node.skills > 0 && ` · ${meta(node)}`}
         </span>
+        {skill && !skill.placed && (
+          <div className="place-in-tree">
+            {placing === null ? (
+              <button type="button" className="small primary" onClick={() => setPlacing("")}>
+                Place in tree…
+              </button>
+            ) : (
+              <SkillSearch
+                autoFocus
+                skills={tree}
+                query={placing}
+                onQuery={setPlacing}
+                mode="parent"
+                placeholder={`Where does ${skill.name} belong? Search the tree`}
+                onCancel={() => setPlacing(null)}
+                onPick={async (pick) => {
+                  if ("name" in pick) return;
+                  try {
+                    await api.updateSkill(skill.id, { parent_id: "top" in pick ? null : pick.skill.id }, roleGroupId);
+                    setPlacing(null);
+                    onChanged();
+                  } catch (e) {
+                    setError((e as Error).message);
+                  }
+                }}
+              />
+            )}
+          </div>
+        )}
         {node.kind === "skill" && node.children.length > 0 && node.jobs.size > 0 && (
           <span className="muted">
             {node.direct} name it, {node.jobs.size - node.direct} name something under it
@@ -556,21 +622,113 @@ export function MapDetails({
       )}
 
       <section>
-        <h3>Postings that ask for it</h3>
+        <div className="details-section-head">
+          <h3>Postings that ask for it</h3>
+          {connectable && picking === null && (
+            <button type="button" className="small" onClick={() => setPicking("")}>
+              <PlusIcon />
+              Connect a posting
+            </button>
+          )}
+        </div>
+        {picking !== null && skill && (
+          <div className="connect-picker">
+            <input
+              autoFocus
+              type="search"
+              value={picking}
+              placeholder="Search your target postings"
+              onChange={(e) => setPicking(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setPicking(null);
+                }
+                if (e.key === "Enter" && choices.length === 1) change(() => api.connectJob(skill.id, choices[0].id, "", roleGroupId));
+              }}
+            />
+            <ul>
+              {choices.map((p) => (
+                <li key={p.id}>
+                  <button type="button" onClick={() => change(() => api.connectJob(skill.id, p.id, "", roleGroupId))}>
+                    <strong>{p.title}</strong>
+                    <span className="muted"> · {p.company}</span>
+                  </button>
+                </li>
+              ))}
+              {choices.length === 0 && (
+                <li className="muted small-note">
+                  {postings.length === 0
+                    ? "No target postings yet. Open a job and choose a role group under Skill Gap."
+                    : q
+                      ? "No posting matches."
+                      : "Every target posting is connected."}
+                </li>
+              )}
+            </ul>
+            <button type="button" className="link quiet" onClick={() => setPicking(null)}>
+              Done
+            </button>
+          </div>
+        )}
+        {error && <div className="error">{error}</div>}
+        {asking.length === 0 && picking === null && (
+          <p className="muted small-note">
+            {connectable ? "None yet. Connect the postings that ask for it." : "None yet. Connect postings to the skills in it."}
+          </p>
+        )}
         <ul className="details-postings">
           {asking.map((p) => {
             const quote = quotes.get(p.id)?.evidence;
-            const named = skill?.job_ids?.includes(p.id) ?? false;
+            const direct = named(p.id);
             return (
-              <li key={p.id}>
+              <li key={p.id} className={direct && skill ? "connected" : ""}>
                 <button type="button" onClick={() => onOpenJob(p.id)}>
                   <span>
                     <strong>{p.title}</strong>
                     <span className="muted"> · {p.company}</span>
                   </span>
-                  {named && quote && <q>{quote}</q>}
-                  {!named && <span className="muted via">via {via(p.id).join(", ")}</span>}
+                  {direct && quote && note?.jobId !== p.id && <q>{quote}</q>}
+                  {!direct && <span className="muted via">via {via(p.id).join(", ")}</span>}
                 </button>
+                {direct && skill && note?.jobId === p.id && (
+                  <input
+                    autoFocus
+                    className="connection-note"
+                    value={note.text}
+                    maxLength={500}
+                    placeholder="The line in the posting, e.g. 3+ years with YOLO"
+                    onChange={(e) => setNote({ jobId: p.id, text: e.target.value })}
+                    onBlur={saveNote}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setNote(null);
+                      }
+                    }}
+                  />
+                )}
+                {direct && skill && (
+                  <span className="posting-actions">
+                    <button
+                      type="button"
+                      className="icon"
+                      title={quote ? "Edit the note" : "Add the line it asks for it in"}
+                      onClick={() => setNote({ jobId: p.id, text: quote ?? "" })}
+                    >
+                      <EditIcon />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon"
+                      title={`Disconnect ${p.title}`}
+                      onClick={() => change(() => api.disconnectJob(skill.id, p.id, roleGroupId))}
+                    >
+                      <CloseIcon />
+                    </button>
+                  </span>
+                )}
               </li>
             );
           })}

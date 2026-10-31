@@ -69,7 +69,6 @@ export interface Job {
   target_group_id: number | null;
   /** Kept only to study the role; hidden from the job board. */
   study_only: boolean;
-  extraction_status: ExtractionStatus | null;
 }
 
 export interface StatusEvent {
@@ -83,15 +82,11 @@ export interface JobDetail extends Job {
   events: StatusEvent[];
   /** Job description captured from the posting by the Chrome extension, or pasted. */
   raw_text: string | null;
-  extraction_error: string | null;
-  extracted_at: string | null;
-  extracted_with: string | null;
   requirements: Requirement[];
 }
 
 // ---- Skill Gap
 
-export type ExtractionStatus = "pending" | "running" | "done" | "failed";
 export type Importance = "must" | "nice";
 
 export const SKILL_MARKS = ["have", "learning", "gap", "ignore"] as const;
@@ -109,7 +104,7 @@ export interface Requirement {
   name: string;
   importance: Importance;
   evidence: string | null;
-  /** "dictionary", "model" or "user" */
+  /** "user"; "dictionary" or "model" for ones made when the app still read descriptions */
   source: string;
   mark: SkillMark | null;
   min_years: number | null;
@@ -153,10 +148,6 @@ export interface SkillRow {
 
 export interface SkillGap {
   targets: number;
-  extracted: number;
-  pending: number;
-  failed: number;
-  without_text: number;
   /** 0..1; null when there is nothing to cover yet. */
   coverage: number | null;
   skills: SkillRow[];
@@ -193,8 +184,6 @@ export interface AIProviderSettings {
   path?: string;
   /** Claude Code: how long the model thinks (low, medium, high, xhigh, max). */
   effort?: string;
-  /** The model, not the dictionary, says whether a skill is a must or a nice to have. */
-  model_decides?: boolean;
   /** Only whether a key is saved; the key itself is never sent to the page. */
   has_key?: boolean;
 }
@@ -204,7 +193,7 @@ export interface AISettings {
   providers: Record<string, AIProviderSettings>;
 }
 
-export type AIProviderInput = { base_url?: string; model?: string; api_key?: string; path?: string; effort?: string; model_decides?: boolean };
+export type AIProviderInput = { base_url?: string; model?: string; api_key?: string; path?: string; effort?: string };
 
 export interface ExtensionInfo {
   token: string;
