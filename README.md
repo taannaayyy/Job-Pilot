@@ -64,7 +64,7 @@ The tree starts as a general skeleton for any field: **Technologies** (programmi
   Concepts and tools are both asked for by postings and can hold other skills. Choose the kind when you add or edit a node.
 - Each node counts the postings that ask for it or for anything under it. Its details say how many name it and how many name something under it, show its description and what is under it, and list the postings with the line each one asks for it in.
 - Under Skill Gap in the sidebar: the role group (with New group, Rename and Delete), the **areas** of your tree with how many asked-for skills each holds (click one to open it; hover for the eye that hides it), **Unsorted**, and the color legend.
-- See the area as a **diagram**, an **outline** with a bar per skill, or **columns** you browse one level at a time; a search looks through every area. Every view, and the details beside it, fills the window and scrolls on its own; zoom sits in the diagram's corner.
+- See the area as a **diagram**, an **outline** with a bar per skill, or **columns** you browse one level at a time; a search looks through every area. Every view, and the details beside it, fills the window and scrolls on its own. The diagram sits on a dotted canvas you can drag freely in any direction; zoom and **Fit** sit in its corner.
 - The **⋯** menu in the header holds **Only skills postings ask for** (what no posting asks for is otherwise drawn faint), the order (as in the tree, most asked for, or A–Z) and **Add at the top level**.
 
 ![The skill tree for one role group, with a skill's details](docs/images/skill-gap.png)

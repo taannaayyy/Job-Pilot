@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from "react";
 import { api } from "../api";
 import { lineage, UNSORTED, type MapNode } from "../skillmap";
 import { children, descendants } from "../tree";
@@ -329,18 +329,35 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
     drag.current = null;
   };
 
+  // The tree sits on a much larger stage, so it can be moved freely in any direction; this puts it
+  // in the middle of what is seen.
+  const center = useCallback(() => {
+    const el = box.current;
+    const inner = content.current;
+    if (!el || !inner) return;
+    const view = el.getBoundingClientRect();
+    const tree = inner.getBoundingClientRect();
+    const margin = 24;
+    // Centered when it fits; otherwise from its left and top edges, so the root is in view.
+    el.scrollLeft += tree.width + 2 * margin <= el.clientWidth ? tree.left + tree.width / 2 - (view.left + el.clientWidth / 2) : tree.left - view.left - margin;
+    el.scrollTop += tree.height + 2 * margin <= el.clientHeight ? tree.top + tree.height / 2 - (view.top + el.clientHeight / 2) : tree.top - view.top - margin;
+  }, []);
   const fit = () => {
     const el = box.current;
     const inner = content.current;
     if (!el || !inner) return;
-    const style = getComputedStyle(el);
-    const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-    // Its size at 100%: all that scrolls, not only the tree, which can be narrower.
-    const width = Math.max(inner.getBoundingClientRect().width, el.scrollWidth - padding) / zoom;
-    // Rounded down, so it fits rather than overflowing by a few pixels; then shown from the left.
-    onZoom(clampZoom(Math.min(1, Math.floor(((el.clientWidth - padding) / width) * 100) / 100)));
-    requestAnimationFrame(() => el.scrollTo({ left: 0 }));
+    const room = 48; // around the tree
+    // Its size at 100%; rounded down, so it fits rather than overflowing by a few pixels.
+    const width = inner.getBoundingClientRect().width / zoom;
+    const height = inner.getBoundingClientRect().height / zoom;
+    const scale = Math.min(1, (el.clientWidth - room) / width, (el.clientHeight - room) / height);
+    onZoom(clampZoom(Math.floor(scale * 100) / 100));
+    requestAnimationFrame(() => requestAnimationFrame(center));
   };
+  // A newly opened area starts in the middle.
+  useLayoutEffect(() => {
+    center();
+  }, [area?.key, center]);
 
   // Every level is a column: each node sits in a cell as wide as the widest node of its depth.
   // Widths are measured after drawing (offsetWidth is in the diagram's own, unzoomed units).
@@ -360,7 +377,8 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
     const style: CSSProperties | undefined =
       n.kind === "skill"
         ? {
-            background: `color-mix(in srgb, var(${n.tool ? "--tool" : "--accent"}) ${Math.round(12 + r * 70)}%, transparent)`,
+            // On a solid base, so the canvas's dots never show through.
+            background: `color-mix(in srgb, var(${n.tool ? "--tool" : "--accent"}) ${Math.round(16 + r * 66)}%, var(--surface))`,
             color: r > 0.6 ? `var(${n.tool ? "--tool-text" : "--accent-text"})` : "var(--text)",
             fontWeight: r > 0.5 ? 700 : r > 0.25 ? 600 : 450,
             fontSize: 12.5 + r * 3,
@@ -412,8 +430,10 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
         onPointerUp={endPan}
         onPointerCancel={endPan}
       >
-        <div ref={content} className="diagram-content" style={{ zoom }}>
-          {area && node(area, 0)}
+        <div className="diagram-stage">
+          <div ref={content} className="diagram-content" style={{ zoom }}>
+            {area && node(area, 0)}
+          </div>
         </div>
       </div>
       {/* In the corner of the tree, over it, while the diagram scrolls. */}
