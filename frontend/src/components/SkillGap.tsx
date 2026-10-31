@@ -279,7 +279,8 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
   return (
     <>
       <div className="toolbar">
-        {groupOptions.length <= 4 ? (
+        {/* Tabs while the names are short (every tab is as wide as the longest); a dropdown otherwise. */}
+        {groupOptions.length <= 4 && Math.max(...groupOptions.map((o) => o.label.length)) <= 22 ? (
           <Segmented
             ariaLabel="Role group"
             value={groupId === null ? "all" : String(groupId)}
@@ -288,6 +289,8 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           />
         ) : (
           <select
+            className="group-select"
+            aria-label="Role group"
             value={groupId === null ? "all" : String(groupId)}
             onChange={(e) => set({ groupId: e.target.value === "all" ? null : Number(e.target.value) })}
           >

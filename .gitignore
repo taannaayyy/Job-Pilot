@@ -55,3 +55,8 @@ packaging/icon.png
 
 # Personal planning notes, kept local
 PLAN*.md
+
+# Agent skills installed locally, kept out of git
+.agents/
+.claude/
+skills-lock.json

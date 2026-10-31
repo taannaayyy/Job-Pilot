@@ -1215,6 +1215,7 @@ label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13
 /* Skill Gap: the skill tree with how many postings ask for each skill */
 .map-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 .map-toolbar select.map-order { width: auto; }
+.toolbar select.group-select { width: auto; max-width: 320px; }
 .map-toolbar .search.compact { width: 200px; }
 .map-status { font-size: 13px; }
 .map-layout { display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch; }
