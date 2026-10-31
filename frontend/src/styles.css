@@ -11,6 +11,9 @@
   --accent: #ff3d00;
   --accent-hi: #ff5a24;
   --accent-text: #ffffff;
+  /* The create buttons and the emblem: a muted terracotta */
+  --primary: #b9522f;
+  --primary-hi: #c96844;
   /* Tools on the skill tree (Docker, PyTorch); concepts use the accent */
   --tool: #1c1c1c;
   --tool-text: #f1ede4;
@@ -58,6 +61,8 @@
     --muted: #a49d90;
     --accent: #ff5a1f;
     --accent-hi: #ff7a45;
+    --primary: #b85a36;
+    --primary-hi: #c8704b;
     --tool: #e8e1d2;
     --tool-text: #141210;
     --marker: #ffd93d;
@@ -93,6 +98,8 @@
   --muted: #a49d90;
   --accent: #ff5a1f;
   --accent-hi: #ff7a45;
+  --primary: #b85a36;
+  --primary-hi: #c8704b;
   --tool: #e8e1d2;
   --tool-text: #141210;
   --marker: #ffd93d;
@@ -196,20 +203,21 @@ button:active:not(:disabled) {
 button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
 button:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
 
+/* A calmer terracotta than the accent, so the create buttons don't pull the eye from the content. */
 button.primary {
-  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  background: linear-gradient(180deg, var(--primary-hi), var(--primary));
   border-color: transparent;
-  color: var(--accent-text);
+  color: #ffffff;
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.2),
-    0 4px 14px -4px color-mix(in srgb, var(--accent) 70%, transparent);
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 4px 12px -5px color-mix(in srgb, var(--primary) 55%, transparent);
 }
 button.primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
-  filter: brightness(1.07);
+  background: linear-gradient(180deg, var(--primary-hi), var(--primary));
+  filter: brightness(1.05);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.25),
-    0 8px 22px -6px color-mix(in srgb, var(--accent) 85%, transparent);
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    0 7px 18px -7px color-mix(in srgb, var(--primary) 70%, transparent);
 }
 button.primary.saved { background: var(--success); animation: pop 0.35s var(--ease-spring); }
 
@@ -314,8 +322,8 @@ main { flex: 1; overflow: auto; padding: 0 20px 20px; }
   height: 30px;
   border-radius: 9px;
   color: #fff;
-  background: linear-gradient(180deg, #ff6a33, #e63500);
-  box-shadow: 0 4px 12px -4px rgb(230 53 0 / 0.55);
+  background: linear-gradient(180deg, var(--primary-hi), var(--primary));
+  box-shadow: 0 4px 10px -5px color-mix(in srgb, var(--primary) 60%, transparent);
 }
 .logo.big { width: 56px; height: 56px; border-radius: 16px; margin-bottom: 8px; }
 .logo.big svg { width: 28px; height: 28px; }

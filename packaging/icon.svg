@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ff6a33"/>
-      <stop offset="1" stop-color="#e63500"/>
+      <stop offset="0" stop-color="#c96844"/>
+      <stop offset="1" stop-color="#b9522f"/>
     </linearGradient>
   </defs>
   <!-- macOS icon grid: 824px rounded square centered in 1024 -->
@@ -14,5 +14,5 @@
     <rect x="632" y="290" width="160" height="420" rx="28" opacity="0.65"/>
   </g>
   <!-- check mark on the first column -->
-  <path d="M268 440 l40 40 l60 -80" fill="none" stroke="#e63500" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M268 440 l40 40 l60 -80" fill="none" stroke="#b9522f" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
