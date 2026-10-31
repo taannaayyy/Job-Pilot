@@ -2,22 +2,85 @@
 
 A local, single-user macOS app for tracking job applications and for seeing what the roles you want require. Everything stays on your Mac in one SQLite file. There are no accounts and no cloud, and nothing runs in the background.
 
+![The job board](docs/images/board.png)
+
 ## Features
 
-- **Save jobs from LinkedIn.** A Chrome extension adds a **Save to Job Pilot** button to LinkedIn job pages. One click saves the title, company, company logo, location, work mode, job type and description. The same posting is never saved twice, even if you also pasted its link by hand. On a LinkedIn company or university page the same button saves the company to your favorites, with its logo, LinkedIn page, website and type. Whatever you save while Job Pilot is closed waits in the extension and is added the next time you open the app.
-- **Skill Gap.** Make any job a **target** of a role group you name, like "AI Engineer (now)" or "Senior ML Engineer (in 3 years)". Its status doesn't matter, and a job can be kept **only to study the role**, off the job board; the **Study only** switch above the board shows those jobs. You connect each target to the skills it asks for **by hand**. Open the job: its description fills the left of a big pop-up and its skills the right. **Select words in the description** and press **Add as skill**, or type in the search: it finds the skill in your tree, shown with where it sits, or adds a new one to Unsorted. The words stay highlighted, with the skill's name on hover and a small × that takes the skill off the job. You can also select a skill on the Skill Gap page and **Connect a posting**. Then place new skills from Unsorted with **Place in tree…**, a search of the tree, or by dragging. The Skill Gap page shows them in a **skill tree**, with how many postings ask for each skill and for anything under it. See it as an **outline** with a bar per skill, as **columns** you browse one level at a time, or as a **diagram** of one area; selecting a skill shows where it sits, its description, what is under it and the line each posting asks for it in. The **skill tree is yours**: it starts as a designed tree, general to specific (Technologies › Machine learning › Deep learning › Computer vision › Object detection › YOLO, plus Domain knowledge, Background and Soft skills, hidden by default), and only you change it. A node is a **skill**, which postings ask for and which can hold other skills (a posting can ask for Machine learning as much as for YOLO), or a **group**, like Cloud, which only organizes and is never asked for itself. A node counts the postings that ask for it or for anything under it; the details say how many name it and how many name something under it. A skill added on a job that your tree doesn't have waits in **Unsorted** until you place it. The page itself is the editor: hover a node for **+** (add a skill or group under it), the pencil (rename it, postings that use the old name still find it, or describe it) and the trash (remove it; a skill comes off the jobs connected to it), double-click to edit, and drag nodes in the diagram or the outline to move them, under another node or between two, and in from Unsorted (or out to it); in the diagram, hold a dragged node over an area's tab to show that area, or drop it on the tab. The whole tree is shown, with what no posting asks for faint; **Only asked for** hides it. **Recommendations** opens a chat about the whole tree with the AI you choose. Search, hide parts of the tree, and order skills as in the tree, by how often they are asked for, or A–Z.
-- **Your choice of AI, or none.** For Recommendations about your skill tree, choose the model in the chat's settings: a local model through Ollama (free, nothing leaves your Mac), any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Gemini, Mistral, LM Studio...), Claude with your own API key, or **Claude Code**, which uses your Claude subscription with no API key (pick the model and effort from a list; Opus 5.5 at medium effort by default) (it needs Claude Code installed and logged in, runs with no tools or files, and counts toward your plan's usage limits). API keys stay on your Mac in a file only you can read.
-- **Board and table views.** Use the kanban board with drag and drop, or a sortable table.
-- **Statuses.** A job moves through Saved, Applied, Screening, Interview, Awaiting decision (all interviews done, waiting for their answer), Offer, Rejected and Ghosted.
-- **Automatic applied date.** It is stamped the first time a job moves to Applied or a later stage.
-- **Status history** for every job, plus notes, a next action, the job URL, job type (full-time, part-time, internship, contract), work mode and source.
-- **Company logos.** Add a company's website and its logo appears next to the name. Companies without a website get a colored badge with their initials. Each logo is downloaded once and saved on your Mac.
-- **Istanbul locations.** City defaults to Istanbul. Pick a district, or just a side ("All of Anadolu Yakası"), from a searchable list grouped by Anadolu Yakası and Avrupa Yakası. Or choose "Other city" and type it.
-- **Search and filters.** Search by company, title or district, and filter by status, job type, work mode and location (Anadolu, Avrupa or other cities).
-- **Companies.** Every company you have interacted with is listed, whether it came in through a job or you added it by hand: companies, startups, research centers and universities. Star your **favorites** and switch between All and Favorites. Each card links to its careers page and its LinkedIn jobs, and records whether it was hiring when you last checked. Cards that haven't been checked for two weeks are marked as due. Add a job there in one click.
-- **Company deduplication.** "Acme AI" and "acme ai" count as the same company.
-- **Light, night and system themes.** The native title bar follows the theme.
-- **Native macOS window** with the usual shortcuts.
+- **Board and table views.** Track jobs on a kanban board with drag and drop, or in a sortable table.
+- **Statuses.** A job moves through Saved, Applied, Screening, Interview, Awaiting decision (all interviews done, waiting for their answer), Offer, Rejected and Ghosted. The applied date is stamped the first time a job reaches Applied or a later stage.
+- **Job details.** Every job keeps its status history, notes, a next action, the job URL, job type (full-time, part-time, internship, contract), work mode and source.
+- **Save jobs from LinkedIn.** A Chrome extension adds a **Save to Job Pilot** button to LinkedIn job pages. One click saves the title, company, logo, location, work mode, job type and description, and the same posting is never saved twice. On a company or university page, the same button saves the company to your favorites. Whatever you save while Job Pilot is closed waits in the extension until you open the app.
+- **Skill Gap.** See what the roles you want ask for, in a skill tree you design yourself. See [Skill Gap](#skill-gap) below.
+- **Companies.** Every company you have interacted with is listed, whether it came in through a job or you added it by hand: companies, startups, research centers and universities. Star your **favorites**, open their careers page and LinkedIn jobs, and record whether they were hiring when you last checked. Companies not checked for two weeks are marked as due. "Acme AI" and "acme ai" count as the same company.
+- **Company logos.** Add a company's website and its logo appears next to the name; without one, it gets a colored badge with its initials. Each logo is downloaded once and kept on your Mac.
+- **Istanbul locations.** City defaults to Istanbul. Pick a district or just a side ("All of Anadolu Yakası") from a searchable list, or choose "Other city" and type it.
+- **Search and filters.** Search by company, title or district, and filter by status, job type, work mode and location.
+- **Light, night and system themes**, in a native macOS window with the usual shortcuts.
+
+![Companies](docs/images/companies.png)
+
+## How you use it
+
+1. **Save a posting.** On LinkedIn, click **Save to Job Pilot**, or add the job by hand with **Add job**.
+2. **Track it.** Drag it across the board as it moves from Saved to Applied, Interview and beyond. Its history, notes and next action stay with it.
+3. **Make it a target.** For a role you are aiming at, now or later, open the job and choose a role group under **Skill Gap**.
+4. **Pick its skills.** Select the words in the description that name a skill and press **Add as skill**.
+5. **Sort new skills into your tree.** On the Skill Gap page, open **Unsorted** and place each new skill where it belongs.
+6. **Read the gap.** The tree shows which skills the roles you want ask for most, so you know what to learn next.
+
+## Skill Gap
+
+### Targets and role groups
+
+Make any job a **target** of a role group you name, like "AI Engineer (now)" or "Senior ML Engineer (in 3 years)". Its status doesn't matter. A job can also be kept **only to study the role**: it leaves the job board, and the **Study only** switch above the board shows those jobs.
+
+### Adding a job's skills
+
+You connect each target to the skills it asks for by hand. Open the job: its description fills the left of the pop-up and its skills the right.
+
+- **Select words in the description** and press **Add as skill**, or type in the search. The search finds the skill in your tree, showing where it sits, or adds a new one to Unsorted. Choose **Must have** or **Nice to have** as you add it; click a skill later to switch it.
+- The words you selected stay highlighted, and only those words: the same words elsewhere in the description stay plain. Hover a highlight to see the skill's name, and its skill lights up on the right; hover a skill on the right and its words light up. The small × on a highlight takes the skill off the job.
+
+![Selecting "classification" in a description and adding it as a skill](docs/images/add-skill.gif)
+
+![A job's description with its skills highlighted, and the skills it asks for](docs/images/job.png)
+
+### Unsorted
+
+A skill your tree doesn't have yet waits in **Unsorted**. The **Unsorted** button on the Skill Gap page shows how many are waiting and opens them beside the tree, most asked for first, each with how many postings ask for it and the words it was picked from. **Place…** searches the tree for where it belongs, or drag it onto a node. To take a node out of the tree, drop it on the Unsorted button or panel.
+
+![Placing skills from Unsorted into the tree](docs/images/place-unsorted.gif)
+
+### The skill tree
+
+The tree starts as a designed tree, general to specific (Technologies › Machine learning › Deep learning › Computer vision › Object detection › YOLO, plus Domain knowledge, Background and Soft skills, hidden by default). After that, only you change it.
+
+- A node is a **skill**, which postings ask for and which can hold other skills (a posting can ask for Machine learning as much as for YOLO), or a **group**, like Cloud, which only organizes.
+- Each node counts the postings that ask for it or for anything under it. Its details say how many name it and how many name something under it, show its description and what is under it, and list the postings with the line each one asks for it in.
+- See the tree as a **diagram** of one area, an **outline** with a bar per skill, or **columns** you browse one level at a time. Search it, hide parts of it, and order skills as in the tree, by how often they are asked for, or A–Z. What no posting asks for is drawn faint; **Only asked for** hides it.
+
+![The skill tree for one role group, with a skill's details](docs/images/skill-gap.png)
+
+### Editing the tree
+
+The page itself is the editor. Hover a node for:
+
+- **+** to add a skill or group under it;
+- the **pencil** to rename it (postings that use the old name still find it) or describe it. **Write with AI** writes a description from the skill's place in the tree, for you to edit before saving;
+- the **trash** to remove it. A skill comes off the jobs connected to it.
+
+Double-click a node to edit it. Drag nodes in the diagram or the outline to move them, under another node or between two. In the diagram, hold a dragged node over an area's tab to show that area, or drop it on the tab.
+
+## AI
+
+AI is optional: it only writes skill descriptions. Choose the model in the AI settings (the gear next to **Write with AI**):
+
+- a local model through **Ollama** (free, nothing leaves your Mac);
+- any **OpenAI-compatible API** (OpenAI, OpenRouter, Groq, Gemini, Mistral, LM Studio...);
+- **Claude** with your own API key;
+- **Claude Code**, which uses your Claude subscription with no API key. Pick the model and effort from a list (Opus 5.5 at medium effort by default). It needs Claude Code installed and logged in, runs with no tools or files, and counts toward your plan's usage limits.
+
+API keys stay on your Mac in a file only you can read.
 
 ## Install
 
@@ -132,10 +195,10 @@ backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
   src/jobpilot/
     api.py               REST endpoints under /api
     capture.py           Endpoints for the Chrome extension
-    skillgap.py          Skill Gap endpoints: role groups, the tree, connecting skills to targets, AI settings
+    skillgap.py          Skill Gap endpoints: role groups, the tree, a job's skills, AI descriptions and settings
     skills.py            Skill names: one key per skill
     taxonomy.py          The starting skill tree
-    ai.py                The AI providers for Recommendations: Ollama, OpenAI-compatible, Claude API, Claude Code
+    ai.py                The AI providers for writing descriptions: Ollama, OpenAI-compatible, Claude API, Claude Code
     linkedin.py          Reads LinkedIn job IDs, locations, job types and company pages
     logos.py             Fetches and caches company logos
     models.py            Database tables
@@ -146,8 +209,13 @@ backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
 frontend/                React + TypeScript + Vite
   src/
     App.tsx              Main screen, filters, theme switch
+    api.ts, types.ts     Calls to the backend and their types
     locations.ts         Istanbul districts by side
-    components/          Board, table, form, detail panel
+    skillmap.ts, tree.ts The skill tree on the Skill Gap page: counts, filters, moving nodes
+    components/          Board, table, forms, job and company panels, and Skill Gap:
+                           SkillGap.tsx, SkillMapViews.tsx (diagram, outline, columns, details),
+                           UnsortedPanel.tsx, NodeDialog.tsx, SkillSearch.tsx,
+                           JobDescription.tsx and JobSkills.tsx (a job's skills)
     styles.css           Themes and animations
 extension/               Chrome extension (Manifest V3)
   content.js             Button on LinkedIn job and company pages, reads the open page

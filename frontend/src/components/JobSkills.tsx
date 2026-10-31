@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type JobChanges } from "../api";
 import type { Importance, JobDetail, Requirement, RoleGroup, SkillRow } from "../types";
 import { CloseIcon } from "./Icons";
+import type { Hovered } from "./JobDescription";
 import Segmented from "./Segmented";
 import SkillSearch, { type SearchPick } from "./SkillSearch";
 
@@ -12,15 +13,18 @@ interface Props {
   onGroupsChanged: () => void;
   onError: (message: string | null) => void;
   /** Words selected in the description to add as a skill: searched for, and kept with the skill. */
-  words: { text: string } | null;
+  words: { text: string; at: number | null } | null;
   onWordsUsed: () => void;
+  /** The skills under the pointer, here or on their words in the description: they light up. */
+  hovered: Hovered | null;
+  onHover: (hovered: Hovered | null) => void;
 }
 
 const NEW_GROUP = "new";
 
 /** The job's part in Skill Gap: which role group it is a target of, and the skills it asks for,
  *  connected by hand (here, or from a skill on the Skill Gap page). */
-export default function JobSkills({ job, groups, onChange, onGroupsChanged, onError, words, onWordsUsed }: Props) {
+export default function JobSkills({ job, groups, onChange, onGroupsChanged, onError, words, onWordsUsed, hovered, onHover }: Props) {
   const [newGroup, setNewGroup] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [addImportance, setAddImportance] = useState<Importance>("must");
@@ -40,7 +44,7 @@ export default function JobSkills({ job, groups, onChange, onGroupsChanged, onEr
     if ("top" in pick) return;
     const name = "skill" in pick ? pick.skill.name : pick.name;
     const evidence = words?.text ?? "";
-    if (await run(() => api.addRequirement(job.id, name, addImportance, evidence))) {
+    if (await run(() => api.addRequirement(job.id, name, addImportance, evidence, words?.at ?? null))) {
       setQuery("");
       onWordsUsed();
       if (!("skill" in pick)) loadTree(); // a new one, in Unsorted
@@ -77,7 +81,13 @@ export default function JobSkills({ job, groups, onChange, onGroupsChanged, onEr
   const nice = job.requirements.filter((r) => r.importance === "nice");
 
   const chip = (r: Requirement) => (
-    <li key={r.id} className={`req-chip ${r.mark ?? "none"}`} title={r.evidence ?? undefined}>
+    <li
+      key={r.id}
+      className={`req-chip ${r.mark ?? "none"}${hovered?.ids.includes(r.id) ? " lit" : ""}`}
+      title={r.evidence ?? undefined}
+      onMouseEnter={() => onHover({ ids: [r.id], from: "list" })}
+      onMouseLeave={() => onHover(null)}
+    >
       <button
         type="button"
         className="req-name"

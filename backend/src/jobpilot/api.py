@@ -70,7 +70,7 @@ def _to_out(job: Job, model: type[JobOut] = JobOut) -> JobOut:
         data["requirements"] = [
             RequirementOut(
                 id=r.id, skill_id=r.skill_id, name=r.skill.name,
-                importance=r.importance, evidence=r.evidence, source=r.source, mark=r.skill.mark,
+                importance=r.importance, evidence=r.evidence, evidence_at=r.evidence_at, source=r.source, mark=r.skill.mark,
                 min_years=r.min_years, max_years=r.max_years, detail=r.detail,
             )
             for r in sorted(job.requirements, key=lambda r: (r.importance != "must", r.skill.name.casefold()))

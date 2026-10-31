@@ -199,8 +199,9 @@ class Requirement(Base):
     job_id: Mapped[int] = mapped_column(ForeignKey("job.id", ondelete="CASCADE"), index=True)
     skill_id: Mapped[int] = mapped_column(ForeignKey("skill.id", ondelete="CASCADE"), index=True)
     importance: Mapped[Importance] = mapped_column(String(10))
-    # The words in the posting it came from.
+    # The words in the posting it came from, and where in the description the user selected them.
     evidence: Mapped[str | None] = mapped_column(String(500))
+    evidence_at: Mapped[int | None] = mapped_column()
     # "3-5 years of Python": years on the skill they're about; overall years on "Professional experience".
     min_years: Mapped[int | None] = mapped_column()
     max_years: Mapped[int | None] = mapped_column()

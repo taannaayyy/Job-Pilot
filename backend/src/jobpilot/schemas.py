@@ -110,6 +110,8 @@ class RequirementOut(BaseModel):
     name: str
     importance: Importance
     evidence: str | None
+    # Where in the description the words were selected; only those are highlighted.
+    evidence_at: int | None = None
     source: str
     mark: SkillMark | None
     min_years: int | None

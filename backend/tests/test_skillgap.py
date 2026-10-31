@@ -76,14 +76,13 @@ def test_gap_list_counts_jobs_and_coverage(client):
     assert [(h["from_mark"], h["to_mark"]) for h in detail["history"]] == [(None, "have")]
 
 
-def test_connecting_a_skill_to_a_posting(client):
+def test_a_skills_connection_to_a_posting(client):
     job, _ = target(client, connect=())
     yolo = _skills(client)["YOLO"]
-    res = client.post(f"/api/skills/{yolo['id']}/jobs", json={"job_id": job["id"], "evidence": " 3+ years with YOLO "})
-    assert res.status_code == 201
-    assert [(j["title"], j["evidence"], j["importance"]) for j in res.json()["jobs"]] == [("AI Engineer", "3+ years with YOLO", "must")]
-    # Connecting again keeps one connection; the note and importance can change.
-    client.post(f"/api/skills/{yolo['id']}/jobs", json={"job_id": job["id"]})
+    client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "YOLO", "evidence": " 3+ years with YOLO "})
+    detail = client.get(f"/api/skills/{yolo['id']}").json()
+    assert [(j["title"], j["evidence"], j["importance"]) for j in detail["jobs"]] == [("AI Engineer", "3+ years with YOLO", "must")]
+    # From the skill's side, the note and importance can change.
     detail = client.patch(f"/api/skills/{yolo['id']}/jobs/{job['id']}", json={"evidence": "YOLOv8", "importance": "nice"}).json()
     assert [(j["evidence"], j["importance"]) for j in detail["jobs"]] == [("YOLOv8", "nice")]
     # It counts on YOLO, and on what is above it.
@@ -95,16 +94,10 @@ def test_connecting_a_skill_to_a_posting(client):
     assert client.get(f"/api/jobs/{job['id']}").json()["requirements"] == []
 
 
-def test_only_target_jobs_and_skills_can_be_connected(client):
-    rows = _skills(client)
+def test_a_group_is_never_asked_for(client):
     job, _ = target(client, connect=())
-    plain = client.post("/api/jobs", json={"company": "Beta", "title": "Data Scientist"}).json()
-    res = client.post(f"/api/skills/{rows['Tableau']['id']}/jobs", json={"job_id": plain["id"]})
-    assert res.status_code == 422 and "role group" in res.json()["detail"]
-    # A group only organizes: never asked for itself, from either side.
-    assert client.post(f"/api/skills/{rows['Cloud']['id']}/jobs", json={"job_id": job["id"]}).status_code == 422
+    # A group only organizes.
     assert client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "cloud"}).status_code == 422
-    assert client.post(f"/api/skills/999/jobs", json={"job_id": job["id"]}).status_code == 404
 
 
 def test_only_targets_count(client):
@@ -150,7 +143,7 @@ def test_unknown_group_is_rejected(client):
     assert client.patch(f"/api/jobs/{job['id']}", json={"target_group_id": 999}).status_code == 404
 
 
-# ---- AI settings (for the Recommendations chat)
+# ---- AI settings (for writing descriptions)
 
 
 def test_api_keys_are_never_sent_back(client, tmp_path):
@@ -544,39 +537,52 @@ def test_upgrading_keeps_skills_and_their_postings(tmp_path):
     assert "extraction_status" not in {r[1] for r in con.execute("PRAGMA table_info(job)")}
 
 
-# ---- Recommendations
+# ---- Descriptions written by the AI
 
 
-class ChattyModel(ai.Provider):
+class WritingModel(ai.Provider):
     name = "ollama"
 
     def chat(self, system, messages):
         self.seen = (system, messages)
-        return "Move Docker to Cloud & infrastructure."
+        return ' "A family of real-time\n object detection models." '
 
 
-def test_recommendation_chat_sends_the_whole_tree(client, monkeypatch):
-    target(client, connect=("pandas", "Keras"))
-    model = ChattyModel({})
+def _skill(client, name):
+    return next(s for s in client.get("/api/skills").json() if s["name"] == name)
+
+
+def test_describe_sends_the_place_in_the_tree(client, monkeypatch):
+    model = WritingModel({})
     monkeypatch.setattr(ai.Settings, "provider", lambda self, name=None, overrides=None: model)
-    res = client.post("/api/ai/chat", json={"messages": [{"role": "user", "content": "Recommend changes"}]})
-    assert res.json() == {"reply": "Move Docker to Cloud & infrastructure.", "used": "Ollama"}
-    system, messages = model.seen
-    assert "- [Technologies] (group)" in system and "- [Soft skills] (group)" in system
-    assert "    - Python (in 0 jobs)\n      - pandas (in 1 job)" in system and "- Machine learning (in 0 jobs)" in system
-    assert "Unsorted" in system and "  - Keras (in 1 job)" in system
-    assert messages == [{"role": "user", "content": "Recommend changes"}]
+    detection = _skill(client, "Object detection")
+    res = client.post("/api/ai/describe", json={"name": "YOLO", "parent_id": detection["id"]})
+    assert res.json() == {"description": "A family of real-time object detection models.", "used": "Ollama"}
+    prompt = model.seen[1][0]["content"]
+    assert prompt.startswith("Skill: YOLO\n") and "Computer vision › Object detection" in prompt
+    assert "Under it" not in prompt
+    # Editing a node: what is under it goes too.
+    vision = _skill(client, "Computer vision")
+    client.post("/api/ai/describe", json={"name": "Computer vision", "parent_id": vision["parent_id"], "skill_id": vision["id"]})
+    assert "Under it: Object detection" in model.seen[1][0]["content"]
 
 
-def test_no_ai_cant_chat(client):
-    res = client.post("/api/ai/chat", json={"provider": "none", "messages": [{"role": "user", "content": "hi"}]})
+def test_no_ai_cant_describe(client):
+    res = client.post("/api/ai/describe", json={"name": "YOLO"})
     assert res.status_code == 422
 
 
 def test_a_skill_picked_from_the_description_keeps_the_words(client):
     job, _ = target(client, connect=())
-    job = client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "YOLO", "evidence": " YOLOv8\n models "}).json()
-    assert [(r["name"], r["evidence"]) for r in job["requirements"]] == [("YOLO", "YOLOv8 models")]
+    job = client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "YOLO", "evidence": " YOLOv8\n models ", "evidence_at": 40}).json()
+    assert [(r["name"], r["evidence"], r["evidence_at"]) for r in job["requirements"]] == [("YOLO", "YOLOv8 models", 40)]
     # Added again without words: the ones it had stay.
     job = client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "yolo", "importance": "nice"}).json()
-    assert [(r["evidence"], r["importance"]) for r in job["requirements"]] == [("YOLOv8 models", "nice")]
+    assert [(r["evidence"], r["evidence_at"], r["importance"]) for r in job["requirements"]] == [("YOLOv8 models", 40, "nice")]
+
+
+def test_the_gap_says_which_words_a_skill_was_picked_from(client):
+    job, _ = target(client, connect=())
+    client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "Keras", "evidence": "Keras or TensorFlow"})
+    row = next(s for s in client.get("/api/skill-gap").json()["skills"] if s["name"] == "Keras")
+    assert row["placed"] is False and row["quotes"] == ["Keras or TensorFlow"]

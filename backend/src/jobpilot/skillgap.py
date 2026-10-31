@@ -1,5 +1,5 @@
 """Skill Gap: role groups, the skill tree, the skills the user connects to each target job added
-up, and the AI settings the Recommendations chat uses."""
+up, and the AI settings used to write skill descriptions."""
 
 import time
 from collections import defaultdict
@@ -135,6 +135,8 @@ class SkillRow(BaseModel):
     description: str = ""
     # The targets that ask for it, so a node can count the postings that ask for anything under it.
     job_ids: list[int] = []
+    # The words in their descriptions it was picked from, each once.
+    quotes: list[str] = []
 
 
 def _row(skill: Skill, jobs: int = 0) -> SkillRow:
@@ -178,6 +180,8 @@ def skill_gap(group_id: int | None = None, session: Session = Depends(get_sessio
             row.job_ids.append(job.id)
             if (y := years_text(req.min_years, req.max_years)) and y not in row.years:
                 row.years.append(y)
+            if req.evidence and req.evidence not in row.quotes:
+                row.quotes.append(req.evidence)
             if req.detail and req.detail not in row.details:
                 row.details.append(req.detail)
             if req.importance == Importance.MUST:
@@ -194,7 +198,7 @@ def skill_gap(group_id: int | None = None, session: Session = Depends(get_sessio
         targets=len(targets),
         coverage=covered / total if total else None,
         skills=sorted(rows.values(), key=lambda r: (-r.jobs, -r.must, r.name.casefold())),
-                postings=[Posting(id=j.id, title=j.title, company=j.company.name) for j in targets],
+        postings=[Posting(id=j.id, title=j.title, company=j.company.name) for j in targets],
     )
 
 
@@ -399,14 +403,7 @@ def remove_skill(skill_id: int, session: Session = Depends(get_session)):
     return list_skills(session)
 
 
-# ---- Connecting a skill to the postings that ask for it
-
-
-class ConnectIn(BaseModel):
-    job_id: int
-    # The line in the posting that asks for it ("3+ years with YOLO").
-    evidence: str = Field(default="", max_length=500)
-    importance: Importance = Importance.MUST
+# ---- A skill's connections to the postings that ask for it (made on the job)
 
 
 class ConnectionUpdate(BaseModel):
@@ -422,28 +419,14 @@ def _connectable(session: Session, skill_id: int, job_id: int) -> tuple[Skill, J
     return skill, job
 
 
-@router.post("/skills/{skill_id}/jobs", response_model=SkillDetail, status_code=201)
-def connect_job(skill_id: int, body: ConnectIn, group_id: int | None = None, session: Session = Depends(get_session)):
-    """The user says this posting asks for this skill."""
-    skill, job = _connectable(session, skill_id, body.job_id)
-    if job.target_group_id is None:
-        raise HTTPException(422, f"{job.title} isn't a target yet: choose a role group for it first")
-    req = next((r for r in job.requirements if r.skill_id == skill.id), None)
-    if req is None:
-        req = Requirement(skill=skill, importance=body.importance, source="user")
-        job.requirements.append(req)
-    req.evidence = body.evidence.strip() or req.evidence
-    session.commit()
-    return _skill_detail(skill, group_id)
-
-
 @router.patch("/skills/{skill_id}/jobs/{job_id}", response_model=SkillDetail)
 def update_connection(skill_id: int, job_id: int, body: ConnectionUpdate, group_id: int | None = None,
                       session: Session = Depends(get_session)):
     skill, job = _connectable(session, skill_id, job_id)
     req = next((r for r in job.requirements if r.skill_id == skill.id), None) or _missing("Connection")
     if body.evidence is not None:
-        req.evidence = body.evidence.strip() or None
+        # Written by hand: no longer the words selected in the description.
+        req.evidence, req.evidence_at = body.evidence.strip() or None, None
     if body.importance is not None:
         req.importance = body.importance
     session.commit()
@@ -460,84 +443,60 @@ def disconnect_job(skill_id: int, job_id: int, group_id: int | None = None, sess
     return _skill_detail(skill, group_id)
 
 
-# ---- Recommendations for the tree
+# ---- Descriptions written by the AI
 
 
-def tree_text(session: Session) -> str:
-    """The whole tree, with how many jobs ask for each skill, then Unsorted, for the model."""
-    asked = defaultdict(int)
-    for req in session.scalars(select(Requirement)):
-        asked[req.skill_id] += 1
-    all_skills = session.scalars(select(Skill).order_by(Skill.position, Skill.id)).all()
-    children: dict[int | None, list[Skill]] = defaultdict(list)
-    for s in all_skills:
-        if s.placed:
-            children[s.parent_id].append(s)
-    lines: list[str] = []
-
-    def line(s: Skill, depth: int) -> str:
-        meaning = f" — {s.description}" if s.description else ""
-        if s.is_group:
-            return "  " * depth + f"- [{s.name}] (group){meaning}"
-        return "  " * depth + f"- {s.name} (in {asked[s.id]} job{'s' if asked[s.id] != 1 else ''}){meaning}"
-
-    def walk(parent_id: int | None, depth: int) -> None:
-        for s in children[parent_id]:
-            lines.append(line(s, depth))
-            walk(s.id, depth + 1)
-
-    walk(None, 0)
-    unsorted = sorted((s for s in all_skills if not s.placed and asked[s.id]), key=lambda s: (-asked[s.id], s.name.casefold()))
-    if unsorted:
-        lines.append("Unsorted (asked for by postings, not in the tree yet):")
-        lines.extend(line(s, 1) for s in unsorted)
-    return "\n".join(lines)
+DESCRIBE_SYSTEM = """You write the description of one node of the skill tree in a job-search app (Job Pilot).
+The tree goes from general to specific; a skill is something job postings ask for, and a group only
+organizes the skills in it. Write one or two plain sentences that say what it is, in the sense its place
+in the tree gives it. No heading, no list, no quotes, no Markdown: only the description."""
 
 
-CHAT_SYSTEM = """You help the user organize the skill tree of their job-search app (Job Pilot).
-The user connects the skills in this tree to the job postings they are aiming for, and the app counts how
-many postings ask for each skill, so the user can see which areas they need to work on. The user designs
-the tree, from general to specific: a node is a skill (which can hold other skills) or a [group], which only
-organizes and is never asked for itself, and a node counts the postings that ask for it or for anything
-under it. Skills not placed in the tree yet wait in Unsorted.
-
-The user's tree, with how many jobs ask for each skill:
-
-{tree}
-
-Recommend concrete changes: where skills in Unsorted belong (or that they should go), skills and groups to
-add, rename, split, merge, move or delete, and duplicates to merge. Use the exact names from the tree, keep
-it short, and order by impact. The user makes the changes in the app themselves."""
+class DescribeIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    is_group: bool = False
+    # Where it sits (or will sit): the node it is under; null at the top level or in Unsorted.
+    parent_id: int | None = None
+    # Editing an existing node: what is under it goes to the model too.
+    skill_id: int | None = None
 
 
-class ChatMessage(BaseModel):
-    role: str = Field(pattern="^(user|assistant)$")
-    content: str = Field(min_length=1, max_length=20_000)
-
-
-class ChatIn(BaseModel):
-    provider: str | None = Field(default=None, pattern="^(" + "|".join(ai.PROVIDERS) + ")$")
-    messages: list[ChatMessage] = Field(min_length=1, max_length=50)
-
-
-class ChatOut(BaseModel):
-    reply: str
+class DescribeOut(BaseModel):
+    description: str
     used: str
 
 
-@router.post("/ai/chat", response_model=ChatOut, dependencies=[Depends(require_app_page)])
-def chat(body: ChatIn, request: Request, session: Session = Depends(get_session)):
-    """One turn of the recommendation chat; the whole tree goes with every turn."""
-    provider = _settings(request).provider(body.provider)
+def _describe_prompt(session: Session, body: DescribeIn) -> str:
+    path: list[str] = []
+    parent = session.get(Skill, body.parent_id) if body.parent_id is not None else None
+    while parent is not None and len(path) < 20:
+        path.insert(0, parent.name)
+        parent = parent.parent
+    lines = [f"{'Group' if body.is_group else 'Skill'}: {body.name.strip()}"]
+    lines.append(f"Where it sits: {' › '.join(path)}" if path else "Where it sits: the top level of the tree")
+    if body.skill_id is not None:
+        under = list(session.scalars(
+            select(Skill).where(Skill.parent_id == body.skill_id, Skill.placed.is_(True)).order_by(Skill.position, Skill.id)
+        ))
+        if under:
+            lines.append(f"Under it: {', '.join(s.name for s in under)}")
+    return "\n".join(lines)
+
+
+@router.post("/ai/describe", response_model=DescribeOut, dependencies=[Depends(require_app_page)])
+def describe(body: DescribeIn, request: Request, session: Session = Depends(get_session)):
+    """Writes a description for a skill or group; the user edits it and saves it themselves."""
+    provider = _settings(request).provider()
     if provider.name == "none":
-        raise HTTPException(422, "Choose an AI model for this: Recommendations need one.")
+        raise HTTPException(422, "Choose an AI model in the AI settings first.")
     try:
-        reply = provider.chat(CHAT_SYSTEM.format(tree=tree_text(session)), [m.model_dump() for m in body.messages])
+        reply = provider.chat(DESCRIBE_SYSTEM, [{"role": "user", "content": _describe_prompt(session, body)}])
     except ai.AIError as e:
         raise HTTPException(422, str(e)) from e
-    if not reply.strip():
+    reply = " ".join(reply.split()).strip('"')
+    if not reply:
         raise HTTPException(422, "The model gave an empty answer. Try again.")
-    return ChatOut(reply=reply.strip(), used=provider.describe())
+    return DescribeOut(description=reply[:2000], used=provider.describe())
 
 
 # ---- A job's requirements
@@ -546,8 +505,9 @@ def chat(body: ChatIn, request: Request, session: Session = Depends(get_session)
 class RequirementIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     importance: Importance = Importance.MUST
-    # The words in the description it was picked from; they stay highlighted there.
+    # The words in the description it was picked from, and where they start in it; only they are highlighted.
     evidence: str = Field(default="", max_length=500)
+    evidence_at: int | None = Field(default=None, ge=0)
 
 
 @router.post("/jobs/{job_id}/requirements", response_model=JobDetail, status_code=201)
@@ -558,12 +518,14 @@ def add_requirement(job_id: int, body: RequirementIn, session: Session = Depends
     if skill.is_group:
         raise HTTPException(422, f"{skill.name} is a group: add the skills in it")
     evidence = " ".join(body.evidence.split()) or None
+    at = body.evidence_at if evidence else None
     existing = next((r for r in job.requirements if r.skill_id == skill.id), None)
     if existing is not None:
         existing.importance, existing.source = body.importance, "user"
-        existing.evidence = evidence or existing.evidence
+        if evidence:
+            existing.evidence, existing.evidence_at = evidence, at
     else:
-        job.requirements.append(Requirement(skill=skill, importance=body.importance, evidence=evidence, source="user"))
+        job.requirements.append(Requirement(skill=skill, importance=body.importance, evidence=evidence, evidence_at=at, source="user"))
     session.commit()
     return _to_out(job, JobDetail)
 

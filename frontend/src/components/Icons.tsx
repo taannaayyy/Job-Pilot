@@ -155,14 +155,6 @@ export const ChevronIcon = () => (
   </svg>
 );
 
-export const SendIcon = () => (
-  <svg {...base}>
-    <path d="M5 12h14M13 6l6 6-6 6" />
-  </svg>
-);
-
-
-
 export const TrashIcon = () => (
   <svg {...base}>
     <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />

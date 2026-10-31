@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import { buildMap, findNode, UNSORTED, type MapNode, type MapSort } from "../skillmap";
+import { buildMap, findNode, UNSORTED, UNSORTED_TARGET, waitingMap, type MapNode, type MapSort } from "../skillmap";
 import { children, descendants, flat, moved } from "../tree";
 import type { RoleGroup, SkillGap as Gap } from "../types";
-import { PlusIcon, SearchIcon, SparkIcon } from "./Icons";
+import { PlusIcon, SearchIcon } from "./Icons";
 import MultiFilter from "./MultiFilter";
 import NodeDialog, { type NodeFields } from "./NodeDialog";
 import Segmented from "./Segmented";
-import SkillChat from "./SkillChat";
 import { ColumnsView, DiagramView, MapDetails, OutlineView, useTreeDrag, type TreeEdit } from "./SkillMapViews";
+import UnsortedPanel from "./UnsortedPanel";
 
 export type GapView = "outline" | "columns" | "diagram";
 export const GAP_VIEWS: readonly GapView[] = ["outline", "columns", "diagram"];
@@ -51,7 +51,7 @@ interface Props {
   filters: GapFilters;
   onFiltersChange: (filters: GapFilters) => void;
   onOpenJob: (id: number) => void;
-  /** The AI settings, for the Recommendations chat. */
+  /** The AI settings, for writing descriptions. */
   onOpenAI: () => void;
   /** Changes whenever something outside this page may have changed the gap list. */
   refreshKey: number;
@@ -64,7 +64,8 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
   const [error, setError] = useState<string | null>(null);
   // null: not editing; "" or a name: the new-group / rename field is open.
   const [naming, setNaming] = useState<{ id: number | null; name: string } | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
+  // The skills waiting in Unsorted, in place of the details.
+  const [unsortedOpen, setUnsortedOpen] = useState(false);
   const layout = useRef<HTMLDivElement>(null);
   // The pop-up that adds under a node (parent; null: the top level) or edits one.
   const [dialog, setDialog] = useState<{ add: MapNode | null } | { edit: MapNode } | null>(null);
@@ -107,7 +108,10 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
     () => buildMap(nodes, hiddenTree, query, view === "diagram" ? "tree" : sort, filters.onlyAsked),
     [nodes, hiddenTree, query, view, sort, filters.onlyAsked],
   );
-  const selectedNode = findNode(roots, selectedKey);
+  const waiting = useMemo(() => waitingMap(nodes, query), [nodes, query]);
+  // The details show a skill in Unsorted too; the views only what is in the tree.
+  const selectedNode = findNode([...roots, ...waiting], selectedKey);
+  const selectedInTree = findNode(roots, selectedKey);
 
   // The pane beside the tree is never taller than the tree (--map-h): a long one scrolls on its own
   // instead of making the page longer. Below the tree (a narrow window) only the screen limits it.
@@ -190,8 +194,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
     const options = flat(nodes)
       .filter(({ depth }) => depth <= 1)
       .map(({ node, depth }) => ({ value: `s${node.id}`, label: `${"   ".repeat(depth)}${node.name}`, count: asked(node.id) }));
-    const unsorted = nodes.filter((n) => !n.placed).length;
-    return unsorted ? [...options, { value: UNSORTED, label: "Unsorted", count: unsorted }] : options;
+    return options;
   }, [nodes]);
 
   const saveName = async () => {
@@ -214,24 +217,32 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
     { value: "all", label: `All targets · ${groups.reduce((n, g) => n + g.job_count, 0)}` },
     ...groups.map((g) => ({ value: String(g.id), label: `${g.name} · ${g.job_count}` })),
   ];
-  // The chat takes the details' place while it is open; it stays mounted, so the conversation stays.
-  const side = (
-    <>
-      <SkillChat hidden={!chatOpen} onClose={() => setChatOpen(false)} onOpenSettings={onOpenAI} />
-      {!chatOpen && (
-        <MapDetails
-          node={selectedNode}
-          total={total}
-          postings={gap?.postings ?? []}
-          roleGroupId={groupId}
-          onSelect={select}
-          onOpenJob={onOpenJob}
-          onChanged={load}
-          tree={nodes}
-        />
-      )}
-    </>
+  const side = unsortedOpen ? (
+    <UnsortedPanel
+      waiting={waiting}
+      total={total}
+      tree={nodes}
+      edit={edit}
+      onPlace={(id, parent) => move(id, parent, children(nodes, parent).filter((n) => n.id !== id).length)}
+      onSelect={(key) => {
+        set({ selected: key });
+        setUnsortedOpen(false);
+      }}
+      onClose={() => setUnsortedOpen(false)}
+    />
+  ) : (
+    <MapDetails
+      node={selectedNode}
+      total={total}
+      postings={gap?.postings ?? []}
+      roleGroupId={groupId}
+      onSelect={select}
+      onOpenJob={onOpenJob}
+      onChanged={load}
+      tree={nodes}
+    />
   );
+  const unsortedCount = nodes.filter((n) => !n.placed).length;
 
   return (
     <>
@@ -320,13 +331,14 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           onChange={(h) => set({ hiddenTree: h })}
         />
         <button
-          className={chatOpen ? "active" : ""}
-          aria-pressed={chatOpen}
-          onClick={() => setChatOpen(!chatOpen)}
-          title="Discuss the tree with the AI you choose"
+          className={`unsorted-button${unsortedOpen ? " active" : ""}${unsortedCount ? " waiting" : ""}${edit.drag.state(UNSORTED_TARGET)}`}
+          aria-pressed={unsortedOpen}
+          onClick={() => setUnsortedOpen(!unsortedOpen)}
+          title="Skills added on jobs that aren't in your tree yet. Drop a node here to take it out of the tree."
+          {...edit.drag.props(UNSORTED_TARGET)}
         >
-          <SparkIcon />
-          Recommendations
+          Unsorted
+          <span className="unsorted-badge">{unsortedCount}</span>
         </button>
       </div>
 
@@ -385,7 +397,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
             {roots.length === 0 ? (
               <div className="empty">{nodes.length === 0 ? "Your tree is empty. Add a skill or group at the top level." : "Nothing matches these filters."}</div>
             ) : view === "columns" ? (
-              <ColumnsView roots={roots} total={total} selected={selectedNode} onSelect={select} edit={edit} details={side} />
+              <ColumnsView roots={roots} total={total} selected={selectedInTree} onSelect={select} edit={edit} details={side} />
             ) : (
               <div className="map-layout" ref={layout}>
                 <div className="map-main">
@@ -393,7 +405,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
                     <OutlineView
                       roots={roots}
                       total={total}
-                      selected={selectedNode}
+                      selected={selectedInTree}
                       onSelect={select}
                       edit={edit}
                       collapsed={new Set(collapsed)}
@@ -403,7 +415,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
                     <DiagramView
                       roots={roots}
                       total={total}
-                      selected={selectedNode}
+                      selected={selectedInTree}
                       onSelect={select}
                       edit={edit}
                       zoom={filters.zoom}
@@ -430,6 +442,9 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           onSave={saveDialog}
           onRemove={"edit" in dialog ? () => remove(dialog.edit) : undefined}
           onClose={() => setDialog(null)}
+          parentId={"add" in dialog ? dialog.add?.skill?.id ?? null : dialog.edit.skill?.placed ? dialog.edit.skill.parent_id : null}
+          skillId={"edit" in dialog ? dialog.edit.skill?.id ?? null : null}
+          onOpenAI={onOpenAI}
         />
       )}
 

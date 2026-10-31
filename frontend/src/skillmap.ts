@@ -29,8 +29,8 @@ const byOrder = (sort: MapSort) => (a: MapNode, b: MapNode) =>
     ? (a.skill?.position ?? 0) - (b.skill?.position ?? 0)
     : (sort === "count" ? b.jobs.size - a.jobs.size : 0) || a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
-/** The whole tree from the gap's skills, then Unsorted. hidden holds node keys ("s12", "unsorted"); a
- *  hidden node hides everything under it. onlyAsked leaves out what no posting asks for. */
+/** The whole tree from the gap's skills (Unsorted is apart: see waitingMap). hidden holds node keys
+ *  ("s12"); a hidden node hides everything under it. onlyAsked leaves out what no posting asks for. */
 export function buildMap(skills: SkillRow[], hidden: Set<string>, query: string, sort: MapSort, onlyAsked = false): MapNode[] {
   const order = byOrder(sort);
 
@@ -50,23 +50,28 @@ export function buildMap(skills: SkillRow[], hidden: Set<string>, query: string,
       .map((s) => node(s, under(s.id)));
 
   let roots = under(null).sort(byOrder("tree"));
-  if (!hidden.has(UNSORTED)) {
-    const waiting = skills.filter((s) => !s.placed).map((s) => node(s, [])).sort(order);
-    if (waiting.length) {
-      const jobs = new Set<number>();
-      waiting.forEach((k) => k.jobs.forEach((j) => jobs.add(j)));
-      roots.push({
-        key: UNSORTED, kind: "group", name: "Unsorted", children: waiting, jobs, direct: 0,
-        description: "Asked for by postings, not in your tree yet. Drag them into the tree, or remove them.",
-        skills: waiting.length, parent: null,
-      });
-    }
-  }
   if (onlyAsked) roots = asked(roots);
   roots = filterMap(roots, query.trim().toLocaleLowerCase("tr"));
   link(roots, null);
   return roots;
 }
+
+/** The skills in Unsorted, asked for by postings and not in the tree yet; most asked first. */
+export function waitingMap(skills: SkillRow[], query: string): MapNode[] {
+  const q = query.trim().toLocaleLowerCase("tr");
+  return skills
+    .filter((s) => !s.placed && s.name.toLocaleLowerCase("tr").includes(q))
+    .map((s): MapNode => ({
+      key: `s${s.id}`, kind: s.is_group ? "group" : "skill", name: s.name, description: s.description, children: [],
+      jobs: new Set(s.job_ids ?? []), direct: s.job_ids?.length ?? 0, skills: 0, skill: s, parent: null,
+    }))
+    .sort((a, b) => b.jobs.size - a.jobs.size || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
+/** Unsorted as a place to drop a node on: it takes the node out of the tree. */
+export const UNSORTED_TARGET: MapNode = {
+  key: UNSORTED, kind: "group", name: "Unsorted", description: "", children: [], jobs: new Set(), direct: 0, skills: 0, parent: null,
+};
 
 function asked(nodes: MapNode[]): MapNode[] {
   return nodes.filter((n) => n.jobs.size > 0).map((n) => ({ ...n, children: asked(n.children) }));

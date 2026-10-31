@@ -6,7 +6,7 @@ import { useClosing } from "../useClosing";
 import { CheckIcon, CloseIcon, ExternalIcon } from "./Icons";
 import FavoriteButton from "./FavoriteButton";
 import CompanyLogo from "./CompanyLogo";
-import JobDescription from "./JobDescription";
+import JobDescription, { type Hovered } from "./JobDescription";
 import JobFields from "./JobFields";
 import JobSkills from "./JobSkills";
 import StatusSelect from "./StatusSelect";
@@ -35,7 +35,9 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
   const [saved, setSaved] = useState(false);
   const [closing, close] = useClosing(onClose, 220);
   // Words selected in the description, on their way to the skill search.
-  const [words, setWords] = useState<{ text: string } | null>(null);
+  const [words, setWords] = useState<{ text: string; at: number | null } | null>(null);
+  // A skill under the pointer, on its words or in the list: both light up.
+  const [hovered, setHovered] = useState<Hovered | null>(null);
 
   useEffect(() => {
     api
@@ -211,7 +213,9 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
                       return false;
                     }
                   }}
-                  onAddWords={job.target_group_id !== null ? (text) => setWords({ text }) : null}
+                  onAddWords={job.target_group_id !== null ? (text, at) => setWords({ text, at }) : null}
+                  hovered={hovered}
+                  onHover={setHovered}
                   onRemove={async (ids) => {
                     try {
                       let updated = job;
@@ -233,6 +237,8 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
                   onError={setError}
                   words={words}
                   onWordsUsed={() => setWords(null)}
+                  hovered={hovered}
+                  onHover={setHovered}
                 />
               </div>
             </div>

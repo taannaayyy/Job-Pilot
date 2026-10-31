@@ -104,6 +104,8 @@ export interface Requirement {
   name: string;
   importance: Importance;
   evidence: string | null;
+  /** Where in the description the words were selected. */
+  evidence_at: number | null;
   /** "user"; "dictionary" or "model" for ones made when the app still read descriptions */
   source: string;
   mark: SkillMark | null;
@@ -144,6 +146,8 @@ export interface SkillRow {
   description: string;
   /** The target postings that ask for it (on Skill Gap). */
   job_ids?: number[];
+  /** The words in their descriptions it was picked from (on Skill Gap). */
+  quotes?: string[];
 }
 
 export interface SkillGap {

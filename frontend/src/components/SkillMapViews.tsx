@@ -27,7 +27,7 @@ interface TreeDrag {
 }
 
 /** Drag a node onto another to put it under it, onto its top or bottom edge to put it before or
- *  after, or onto Unsorted to take it out of the tree. Indexes are counted in the whole tree
+ *  after, or onto Unsorted (its button or panel) to take it out of the tree. Indexes are counted in the whole tree
  *  (all), not in what the view shows. */
 export function useTreeDrag(all: SkillRow[], move: (id: number, parent: number | null, index: number) => void, unsort: (id: number) => void): TreeDrag {
   const [dragging, setDragging] = useState<MapNode | null>(null);
@@ -131,7 +131,7 @@ function NodeActions({ node, edit }: { node: MapNode; edit: TreeEdit }) {
 }
 
 /** Nothing under it is asked for: drawn faint. */
-const faint = (n: MapNode) => (n.key !== UNSORTED && n.jobs.size === 0 ? " unasked" : "");
+const faint = (n: MapNode) => (n.jobs.size === 0 ? " unasked" : "");
 
 interface ViewProps {
   roots: MapNode[];
@@ -323,10 +323,13 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
     const el = box.current;
     const inner = content.current;
     if (!el || !inner) return;
-    const width = inner.getBoundingClientRect().width / zoom; // its size at 100%
     const style = getComputedStyle(el);
-    const room = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    onZoom(clampZoom(Math.min(1, room / width)));
+    const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    // Its size at 100%: all that scrolls, not only the tree, which can be narrower.
+    const width = Math.max(inner.getBoundingClientRect().width, el.scrollWidth - padding) / zoom;
+    // Rounded down, so it fits rather than overflowing by a few pixels; then shown from the left.
+    onZoom(clampZoom(Math.min(1, Math.floor(((el.clientWidth - padding) / width) * 100) / 100)));
+    requestAnimationFrame(() => el.scrollTo({ left: 0 }));
   };
 
   // Every level is a column: each node sits in a cell as wide as the widest node of its depth.
@@ -341,11 +344,6 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
     setColumns((old) => (old.length === widths.length && old.every((w, i) => w === widths[i]) ? old : widths));
   }, [area, roots, total, selected]);
 
-  // While dragging, an empty Unsorted shows too, so a node can be taken out of the tree.
-  const tabs =
-    edit.drag.active && !roots.some((n) => n.key === UNSORTED)
-      ? [...roots, { key: UNSORTED, kind: "group" as const, name: "Unsorted", description: "", children: [], jobs: new Set<number>(), direct: 0, skills: 0, parent: null }]
-      : roots;
 
   const node = (n: MapNode, depth: number) => {
     const r = share(n, total);
@@ -420,7 +418,7 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
             </button>
           </div>
           <div className="area-tabs" role="tablist" aria-label="Area">
-            {tabs.map((n) => (
+            {roots.map((n) => (
               <button
                 key={n.key}
                 type="button"
@@ -467,7 +465,6 @@ export function MapDetails({
   tree: SkillRow[];
 }) {
   const [detail, setDetail] = useState<SkillDetail | null>(null);
-  const [picking, setPicking] = useState<string | null>(null); // the search in the posting picker
   const [note, setNote] = useState<{ jobId: number; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [placing, setPlacing] = useState<string | null>(null); // the search for where it belongs
@@ -476,7 +473,6 @@ export function MapDetails({
   // A skill's postings come with the line each one asks for it in.
   useEffect(() => {
     setDetail(null);
-    setPicking(null);
     setNote(null);
     setPlacing(null);
     setError(null);
@@ -508,8 +504,6 @@ export function MapDetails({
   // Postings are connected to skills, never to a group, which only organizes.
   const connectable = node.kind === "skill" && skill !== undefined;
   const named = (jobId: number) => quotes.has(jobId) || (skill?.job_ids?.includes(jobId) ?? false);
-  const q = (picking ?? "").trim().toLocaleLowerCase("tr");
-  const choices = postings.filter((p) => !named(p.id) && `${p.title} ${p.company}`.toLocaleLowerCase("tr").includes(q));
   const saveNote = () => {
     if (!note || !skill) return;
     const old = quotes.get(note.jobId)?.evidence ?? "";
@@ -622,59 +616,11 @@ export function MapDetails({
       )}
 
       <section>
-        <div className="details-section-head">
-          <h3>Postings that ask for it</h3>
-          {connectable && picking === null && (
-            <button type="button" className="small" onClick={() => setPicking("")}>
-              <PlusIcon />
-              Connect a posting
-            </button>
-          )}
-        </div>
-        {picking !== null && skill && (
-          <div className="connect-picker">
-            <input
-              autoFocus
-              type="search"
-              value={picking}
-              placeholder="Search your target postings"
-              onChange={(e) => setPicking(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.stopPropagation();
-                  setPicking(null);
-                }
-                if (e.key === "Enter" && choices.length === 1) change(() => api.connectJob(skill.id, choices[0].id, "", roleGroupId));
-              }}
-            />
-            <ul>
-              {choices.map((p) => (
-                <li key={p.id}>
-                  <button type="button" onClick={() => change(() => api.connectJob(skill.id, p.id, "", roleGroupId))}>
-                    <strong>{p.title}</strong>
-                    <span className="muted"> · {p.company}</span>
-                  </button>
-                </li>
-              ))}
-              {choices.length === 0 && (
-                <li className="muted small-note">
-                  {postings.length === 0
-                    ? "No target postings yet. Open a job and choose a role group under Skill Gap."
-                    : q
-                      ? "No posting matches."
-                      : "Every target posting is connected."}
-                </li>
-              )}
-            </ul>
-            <button type="button" className="link quiet" onClick={() => setPicking(null)}>
-              Done
-            </button>
-          </div>
-        )}
+        <h3>Postings that ask for it</h3>
         {error && <div className="error">{error}</div>}
-        {asking.length === 0 && picking === null && (
+        {asking.length === 0 && (
           <p className="muted small-note">
-            {connectable ? "None yet. Connect the postings that ask for it." : "None yet. Connect postings to the skills in it."}
+            {connectable ? "None yet. Open a job and select the words that name it." : "None yet. Add the skills in it on a job."}
           </p>
         )}
         <ul className="details-postings">

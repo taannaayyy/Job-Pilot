@@ -1205,32 +1205,6 @@ label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13
 }
 .req-years { margin-left: 5px; font-size: 11px; font-weight: 600; color: var(--accent); }
 
-/* Recommendation chat, in place of the details on Skill Gap */
-.chat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.chat-head select { width: auto; }
-.chat-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
-.chat-empty { margin: auto; max-width: 340px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.chat-empty p { margin: 0; line-height: 1.5; font-size: 13px; }
-.chat-msg { max-width: 92%; padding: 9px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; animation: rise 0.25s var(--ease-out) both; }
-.chat-msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-text); border-bottom-right-radius: 4px; }
-.chat-msg.assistant { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; white-space: normal; }
-.chat-msg.thinking { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-.md p { margin: 0 0 8px; }
-.md p:last-child { margin-bottom: 0; }
-.md h4 { margin: 10px 0 6px; font-size: 13.5px; }
-.md h4:first-child { margin-top: 0; }
-.md ul, .md ol { margin: 0 0 8px; padding-left: 20px; }
-.md li { margin: 2px 0; }
-.md code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--surface-2); }
-.chat-input { display: flex; gap: 8px; margin-top: 8px; align-items: flex-end; }
-.chat-input textarea { flex: 1; resize: none; }
-.chat-input button { height: 40px; }
-
-.md table { border-collapse: collapse; width: 100%; margin: 4px 0 10px; font-size: 12.5px; table-layout: auto; }
-.md th, .md td { border: 1px solid var(--border); padding: 5px 7px; white-space: normal; text-align: left; vertical-align: top; }
-.md th { position: static; background: var(--surface-2); font-size: 11px; }
-.chat-msg.assistant { max-width: 100%; }
-
 /* Skill Gap: the skill tree with how many postings ask for each skill */
 .map-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 .map-status { font-size: 13px; }
@@ -1309,6 +1283,28 @@ button.d-node.selected { outline: 2px solid var(--text); outline-offset: 2px; }
 .map-details { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); position: sticky; top: 12px; max-height: min(calc(100vh - 24px), var(--map-h, 100vh)); overflow-y: auto; overscroll-behavior: contain; }
 /* --map-h: the tree's height beside it (SkillGap.tsx), so a long pane scrolls on its own instead of the page. */
 .map-details.empty-details { display: block; line-height: 1.5; }
+/* Unsorted: the skills not in the tree yet, in place of the details */
+.unsorted-button { gap: 7px; }
+.unsorted-badge { min-width: 20px; padding: 1px 6px; border-radius: 99px; background: var(--surface-3); color: var(--muted); font-size: 11.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.unsorted-button.waiting .unsorted-badge { background: var(--warning); color: #fff; }
+.unsorted-button.drop-inside, .unsorted-button.drop-inside:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.unsorted-panel { gap: 12px; }
+.unsorted-panel.drop-inside { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.unsorted-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.unsorted-head h2 { margin: 0; font-size: 20px; }
+.unsorted-done { margin: auto 0; padding: 24px 0; text-align: center; }
+.unsorted-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.unsorted-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-left: 3px solid var(--warning); border-radius: 9px; background: var(--surface-2); cursor: grab; transition: background-color 0.15s ease, border-color 0.15s ease; }
+.unsorted-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); border-left-color: var(--warning); }
+.unsorted-row.dragging { opacity: 0.35; }
+.unsorted-top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.unsorted-name { display: block; flex: 0 1 auto; padding: 0; font-weight: 600; color: var(--text); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.unsorted-top > :not(.unsorted-name, .spacer) { flex: none; }
+.unsorted-top > .spacer { flex: 1; }
+.unsorted-count { font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.unsorted-top button.icon { width: 26px; height: 26px; flex: none; }
+.unsorted-top button.icon svg { width: 14px; height: 14px; }
+.unsorted-quotes { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
 .details-head { display: flex; flex-direction: column; gap: 4px; }
 .details-head h2 { margin: 0; font-size: 22px; }
 .crumbs { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12.5px; }
@@ -1337,9 +1333,18 @@ button.d-node.selected { outline: 2px solid var(--text); outline-offset: 2px; }
 .zoom-controls button.zoom-level { min-width: 52px; }
 .zoom-controls button.zoom-level:hover:not(:disabled), .zoom-controls button.zoom-fit:hover:not(:disabled) { background: var(--surface-3); transform: none; box-shadow: none; }
 /* The app window turns off selecting text; these are worth copying. */
-.chat-msg, .details-description { -webkit-user-select: text; user-select: text; cursor: text; }
+.details-description { -webkit-user-select: text; user-select: text; cursor: text; }
 
 /* The pop-up that edits a group or skill in the tree dialog. */
+/* AI settings opened from the edit pop-up go above it */
+.overlay.above-pop { z-index: 70; }
+.edit-pop .field { display: flex; flex-direction: column; gap: 5px; }
+.edit-pop .field > textarea { color: var(--text); font-weight: 400; font-size: 14px; }
+.desc-head { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.desc-head label { cursor: default; }
+.desc-head .spacer { flex: 1; }
+.desc-head button { height: 28px; padding: 0 9px; font-size: 12.5px; }
+.desc-head button.icon { width: 28px; padding: 0; }
 .edit-pop-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--overlay); animation: fade-in 0.15s ease both; }
 .edit-pop { width: min(520px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-lg); animation: modal-in 0.25s var(--ease-spring) backwards; }
 .edit-pop h2 { margin: 0; font-size: 17px; }
@@ -1388,20 +1393,9 @@ button.d-node.drop-after::after { bottom: -5px; }
 .check-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .check-chip input { width: auto; margin: 0; }
 .toolbar > button.active { background: color-mix(in srgb, var(--accent) 16%, var(--surface-2)); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
-.map-details.chat-panel { flex-basis: 400px; gap: 0; padding: 16px; height: calc(100vh - 210px); min-height: min(420px, var(--map-h, 420px)); overflow: hidden; }
-.map-details.chat-panel[hidden] { display: none; }
-.chat-panel .chat-head select { flex: 0 1 auto; min-width: 0; }
-.chat-panel .chat-head button.icon { flex: none; }
 .area-tabs button.drop-inside, .area-tabs button.drop-inside:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text); box-shadow: inset 0 0 0 1.5px var(--accent); }
 
 /* Connecting postings to a skill by hand, in the details */
-.details-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.details-section-head h3 { margin: 0; }
-.connect-picker { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
-.connect-picker ul { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.connect-picker li > button { display: block; width: 100%; height: auto; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; box-shadow: none; color: var(--text); font-weight: 450; text-align: left; }
-.connect-picker li > button:hover:not(:disabled) { background: var(--surface-3); transform: none; box-shadow: none; }
-.connect-picker > .link { align-self: flex-end; }
 .details-postings li { position: relative; }
 .details-postings li.connected > button { padding-right: 66px; }
 .details-postings .posting-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; visibility: hidden; }
@@ -1409,7 +1403,6 @@ button.d-node.drop-after::after { bottom: -5px; }
 .details-postings .posting-actions button.icon { width: 26px; height: 26px; }
 .details-postings .posting-actions svg { width: 13px; height: 13px; }
 .details-postings .connection-note { width: 100%; margin-top: 4px; font-size: 13px; }
-.details-section-head > button { flex: none; white-space: nowrap; }
 
 /* A job opens as a big pop-up: its details on the left, what it asks for on the right, each scrolling on its own. */
 .panel.job-pop { margin: auto; width: min(1100px, calc(100vw - 32px)); height: calc(100vh - 32px); display: flex; flex-direction: column; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; animation: modal-in 0.3s var(--ease-spring) both; }
@@ -1452,7 +1445,13 @@ button.add-words { position: absolute; z-index: 3; translate: -50% calc(-100% - 
 .place-in-tree { margin-top: 6px; }
 .place-in-tree .skill-search-list { position: static; margin-top: 4px; box-shadow: none; }
 button.add-words.below { translate: -50% 6px; }
-mark.picked { position: relative; }
+mark.picked { position: relative; transition: background-color 0.15s ease, box-shadow 0.15s ease; }
+/* A skill under the pointer, on its words or in the list: both light up, and its name shows above the words. */
+mark.picked.lit { background: color-mix(in srgb, var(--accent) 50%, transparent); box-shadow: 0 0 0 1px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent); }
+mark.picked::before { content: attr(data-skills); position: absolute; z-index: 3; bottom: calc(100% + 12px); left: 0; padding: 3px 8px; border-radius: 6px; background: var(--accent); color: var(--accent-text); font-size: 11.5px; font-weight: 600; line-height: 1.3; white-space: nowrap; box-shadow: var(--shadow); pointer-events: none; visibility: hidden; }
+mark.picked.lit::before { visibility: visible; }
+.req-chip { transition: background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+.req-chip.lit { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); box-shadow: 0 0 0 1px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent); }
 /* The × on a highlight: shown on hover, takes its skills off the job. */
 mark.picked button.unpick { position: relative; top: -9px; z-index: 2; margin: 0 -8px 0 -9px; vertical-align: top; display: inline-flex; visibility: hidden; transition: visibility 0s linear 0.3s; align-items: center; justify-content: center; width: 17px; height: 17px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); box-shadow: var(--shadow); color: var(--muted); -webkit-user-select: none; user-select: none; }
 mark.picked button.unpick svg { width: 10px; height: 10px; }

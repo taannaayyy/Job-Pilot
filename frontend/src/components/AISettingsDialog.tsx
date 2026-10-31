@@ -11,7 +11,7 @@ interface Props {
 }
 
 const CHOICES: { value: AIProvider; title: string; text: string }[] = [
-  { value: "none", title: "No AI", text: "Recommendations are off." },
+  { value: "none", title: "No AI", text: "Writing descriptions is off." },
   { value: "ollama", title: "Local model (Ollama)", text: "Runs on this Mac. Free, and nothing leaves the computer." },
   { value: "openai", title: "OpenAI-compatible API", text: "OpenAI, OpenRouter, Groq, Gemini, Mistral, LM Studio and others." },
   { value: "anthropic", title: "Claude API", text: "Anthropic's API, with your own key." },
@@ -128,11 +128,11 @@ export default function AISettingsDialog({ onClose, onSaved }: Props) {
   };
 
   return (
-    <div className={`overlay ${closing ? "closing" : ""}`} onMouseDown={close}>
+    <div className={`overlay above-pop ${closing ? "closing" : ""}`} onMouseDown={close}>
       <div className="modal" role="dialog" aria-labelledby="ai-title" onMouseDown={(e) => e.stopPropagation()}>
         <h2 id="ai-title">AI model</h2>
         <p className="modal-hint">
-          Answers Recommendations about your skill tree. Pick whatever you like, and change it any time.
+          Writes the descriptions of the skills in your tree. Pick whatever you like, and change it any time.
         </p>
 
         {!form ? (
