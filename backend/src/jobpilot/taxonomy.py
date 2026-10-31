@@ -47,6 +47,9 @@ TREE = """
   Leadership
 """
 
+# The skills above that are tools you can point to; the other skills are concepts and practices.
+TOOLS = {"Python", "JavaScript", "Java", "SQL", "AWS", "Azure", "Google Cloud", "Docker", "Git"}
+
 OVERALL_EXPERIENCE = "Professional experience"
 
 

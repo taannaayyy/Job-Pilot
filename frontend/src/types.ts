@@ -133,6 +133,8 @@ export interface SkillRow {
   placed: boolean;
   /** Only organizes ("Cloud"); never asked for itself. */
   is_group: boolean;
+  /** A tool you can point to ("Docker"); otherwise a concept or practice ("Feature engineering"). */
+  is_tool: boolean;
   mark: SkillMark | null;
   plan_note: string;
   jobs: number;

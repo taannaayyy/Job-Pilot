@@ -11,6 +11,9 @@
   --accent: #2f6fde;
   --accent-hi: #4a86f0;
   --accent-text: #ffffff;
+  /* Tools on the skill tree (Docker, PyTorch); concepts use the accent */
+  --tool: #0e8a7a;
+  --tool-text: #ffffff;
   --ring: rgb(47 111 222 / 0.28);
   --glow: rgb(47 111 222 / 0.1);
   --success: #1f9d55;
@@ -52,6 +55,8 @@
     --muted: #8b93a3;
     --accent: #5b8cf5;
     --accent-hi: #7aa3ff;
+    --tool: #3ec1ad;
+    --tool-text: #0f1115;
     --ring: rgb(110 155 255 / 0.35);
     --glow: rgb(91 140 245 / 0.14);
     --success: #3cc47a;
@@ -83,6 +88,8 @@
   --muted: #8b93a3;
   --accent: #5b8cf5;
   --accent-hi: #7aa3ff;
+  --tool: #3ec1ad;
+  --tool-text: #0f1115;
   --ring: rgb(110 155 255 / 0.35);
   --glow: rgb(91 140 245 / 0.14);
   --success: #3cc47a;
@@ -1207,13 +1214,27 @@ label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13
 
 /* Skill Gap: the skill tree with how many postings ask for each skill */
 .map-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.map-toolbar select.map-order { width: auto; }
+.map-toolbar .search.compact { width: 200px; }
 .map-status { font-size: 13px; }
-.map-layout { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
-.map-main { flex: 999 1 620px; min-width: 0; }
+.map-layout { display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch; }
+/* --view-h: from the view's top to the bottom of the window (SkillGap.tsx); every view and the pane
+   beside it take that height and scroll inside, so switching views never changes the page's height. */
+.map-main { flex: 999 1 620px; min-width: 0; height: var(--view-h, auto); display: flex; flex-direction: column; }
+.map-main > .outline { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.map-main > .diagram-wrap { flex: 1; min-height: 0; }
 .map-bar { display: block; height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
 .map-bar.thin { height: 4px; }
 .map-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .map-bar.group > span { background: color-mix(in srgb, var(--accent) 45%, var(--surface-3)); }
+.map-bar.tool > span { background: var(--tool); }
+/* Concept or tool: a small mark before the name in the outline and columns */
+.kind-dot { flex: none; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+.kind-dot.tool { border-radius: 2px; background: var(--tool); }
+.kind-legend { display: inline-flex; align-items: center; gap: 12px; margin-right: 14px; font-size: 12.5px; color: var(--muted); }
+.kind-legend span { display: inline-flex; align-items: center; }
+.kind-legend .kind-dot { margin-right: 5px; }
+.kind-dot.group { border-radius: 2px; background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
 
 .outline { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 6px; }
 .outline-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, 220px) 44px; gap: 12px; align-items: center; min-height: 36px; padding: 0 10px; border-radius: 9px; cursor: pointer; }
@@ -1221,7 +1242,7 @@ label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13
 .outline-row.selected { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .outline-row.group.depth-0 { background: var(--surface-2); margin-top: 4px; }
 .outline-row.group.depth-0.selected { background: color-mix(in srgb, var(--accent) 18%, var(--surface-2)); }
-.outline-head { min-height: 30px; cursor: default; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+.outline-head { position: sticky; top: -6px; z-index: 1; background: var(--surface); min-height: 30px; cursor: default; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 .outline-head:hover { background: none; }
 .outline-row .num { text-align: right; font-variant-numeric: tabular-nums; }
 .o-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -1234,8 +1255,8 @@ label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13
 .outline-row.group.depth-0 .o-label { font-size: 12.5px; letter-spacing: 0.05em; text-transform: uppercase; }
 .o-meta { margin-left: 4px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 
-.map-columns { display: flex; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow-x: auto; min-height: 520px; }
-.map-col { flex: 0 0 250px; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-right: 1px solid var(--border); max-height: calc(100vh - 230px); overflow-y: auto; }
+.map-columns { display: flex; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow-x: auto; height: var(--view-h, auto); min-height: 360px; }
+.map-col { flex: 0 0 250px; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-right: 1px solid var(--border); overflow-y: auto; }
 .map-col-label { padding: 6px 10px 8px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 button.map-col-item { display: flex; align-items: center; gap: 10px; width: 100%; height: auto; min-height: 44px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; box-shadow: none; color: var(--text); font-weight: 450; text-align: left; justify-content: flex-start; }
 button.map-col-item:hover:not(:disabled) { background: var(--surface-2); transform: none; box-shadow: none; }
@@ -1251,14 +1272,18 @@ button.map-col-item.current .map-bar > span { background: var(--accent-text); }
 .map-col-count { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .map-col-arrow { color: var(--muted); font-size: 16px; }
 .map-col.map-col-details { flex: 1 0 320px; border-right: 0; padding: 0; }
-.map-col.map-col-details .map-details { border: 0; background: none; position: static; max-height: none; overflow: visible; }
+.map-col.map-col-details .map-details { border: 0; background: none; position: static; height: auto; max-height: none; overflow: visible; }
 
 .diagram-wrap { display: flex; flex-direction: column; gap: 12px; }
-.area-tabs { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
-.area-tabs button { height: auto; padding: 6px 12px; border: 0; border-radius: 7px; background: transparent; box-shadow: none; color: var(--muted); font-weight: 500; }
+.diagram-wrap > .diagram { flex: 1; min-height: 0; }
+.area-tabs { display: flex; gap: 2px; max-width: 100%; width: max-content; padding: 3px; overflow-x: auto; scrollbar-width: none; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.area-tabs::-webkit-scrollbar { display: none; }
+.area-count { margin-left: 7px; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.area-tabs button.active .area-count { color: var(--text); }
+.area-tabs button { flex: none; white-space: nowrap; height: auto; padding: 6px 11px; font-size: 13.5px; border: 0; border-radius: 7px; background: transparent; box-shadow: none; color: var(--muted); font-weight: 500; }
 .area-tabs button:hover:not(:disabled) { background: var(--surface-2); color: var(--text); transform: none; box-shadow: none; }
 .area-tabs button.active, .area-tabs button.active:hover:not(:disabled) { background: var(--surface-3); color: var(--text); }
-.diagram { position: relative; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 56px 24px 24px; overflow: auto; max-height: calc(100vh - 202px); min-height: 360px; cursor: grab; }
+.diagram { position: relative; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 56px 24px 24px; overflow: auto; cursor: grab; }
 .diagram:active { cursor: grabbing; }
 .diagram-content { width: max-content; }
 .d-row { display: flex; align-items: center; width: max-content; }
@@ -1275,13 +1300,17 @@ button.map-col-item.current .map-bar > span { background: var(--accent-text); }
 .d-item:last-child::after { bottom: 50%; }
 button.d-node { display: inline-flex; align-items: center; gap: 8px; height: auto; padding: 6px 12px; border: 0; border-radius: 999px; box-shadow: none; white-space: nowrap; font-weight: 450; }
 button.d-node:hover:not(:disabled) { transform: none; box-shadow: 0 0 0 2px var(--ring); }
+button.d-node.tool { border-radius: 8px; }
+/* The kind shows even when no posting asks for it: an outline in its color */
+button.d-node.skill { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+button.d-node.tool { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tool) 55%, transparent); }
+button.d-node .kind-dot { margin-right: 0; }
 button.d-node.group { padding: 8px 14px; border: 1.5px solid var(--border); background: var(--surface-2); color: var(--text); font-weight: 650; }
 button.d-node.root { padding: 12px 18px; border-radius: 12px; background: var(--accent); color: var(--accent-text); font-size: 15px; font-weight: 700; }
 button.d-node.selected { outline: 2px solid var(--text); outline-offset: 2px; }
 .d-count { font-size: 11.5px; font-weight: 600; opacity: 0.8; font-variant-numeric: tabular-nums; }
 
-.map-details { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); position: sticky; top: 12px; max-height: min(calc(100vh - 24px), var(--map-h, 100vh)); overflow-y: auto; overscroll-behavior: contain; }
-/* --map-h: the tree's height beside it (SkillGap.tsx), so a long pane scrolls on its own instead of the page. */
+.map-details { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); height: var(--view-h, auto); overflow-y: auto; overscroll-behavior: contain; }
 .map-details.empty-details { display: block; line-height: 1.5; }
 /* Unsorted: the skills not in the tree yet, in place of the details */
 .unsorted-button { gap: 7px; }
@@ -1345,6 +1374,11 @@ button.d-node.selected { outline: 2px solid var(--text); outline-offset: 2px; }
 .desc-head .spacer { flex: 1; }
 .desc-head button { height: 28px; padding: 0 9px; font-size: 12.5px; }
 .desc-head button.icon { width: 28px; padding: 0; }
+/* A short notice at the bottom, with a way back ("Removed Python · Undo") */
+.toast { position: fixed; z-index: 80; left: 50%; bottom: 24px; translate: -50% 0; display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-lg); color: var(--text); font-size: 13.5px; animation: fade-in 0.2s ease both; }
+.toast button.link { padding: 0; color: var(--accent); font-weight: 600; text-decoration: none; }
+.toast button.link:hover { text-decoration: underline; }
+.toast kbd { padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font: inherit; font-size: 11.5px; }
 .edit-pop-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--overlay); animation: fade-in 0.15s ease both; }
 .edit-pop { width: min(520px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-lg); animation: modal-in 0.25s var(--ease-spring) backwards; }
 .edit-pop h2 { margin: 0; font-size: 17px; }

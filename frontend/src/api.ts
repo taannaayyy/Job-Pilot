@@ -72,6 +72,8 @@ export const api = {
     body: {
       name?: string;
       description?: string;
+      /** A tool you can point to, or (false) a concept. */
+      is_tool?: boolean;
       mark?: SkillMark | null;
       plan_note?: string;
       /** Moving it: under parent_id (null: the top level), at index among its new siblings. */
@@ -94,9 +96,11 @@ export const api = {
   removeRequirement: (jobId: number, id: number) =>
     request<JobDetail>(`/jobs/${jobId}/requirements/${id}`, { method: "DELETE" }),
   listSkills: () => request<SkillRow[]>("/skills"),
-  createSkill: (body: { name: string; parent_id: number | null; index?: number; is_group?: boolean; description?: string }) =>
+  createSkill: (body: { name: string; parent_id: number | null; index?: number; is_group?: boolean; is_tool?: boolean; description?: string }) =>
     request<SkillRow[]>("/skills", { method: "POST", body: JSON.stringify(body) }),
   deleteSkill: (id: number) => request<SkillRow[]>(`/skills/${id}`, { method: "DELETE" }),
+  /** Brings back the last removed skill, in its place, with what was under it and its jobs. */
+  undoRemoveSkill: () => request<{ name: string; skills: SkillRow[] }>("/skills/undo-remove", { method: "POST" }),
   /** A description for a skill or group, written by the AI model in the settings; nothing is saved. */
   describeSkill: (body: { name: string; is_group: boolean; parent_id: number | null; skill_id: number | null }) =>
     request<{ description: string; used: string }>("/ai/describe", { method: "POST", body: JSON.stringify(body) }),

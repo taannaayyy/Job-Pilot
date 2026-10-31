@@ -142,12 +142,16 @@ interface ViewProps {
   edit: TreeEdit;
 }
 
+/** "group", "skill" (a concept) or "tool": its color on the tree. */
+const kindClass = (n: MapNode) => (n.kind === "group" ? "group" : n.tool ? "tool" : "skill");
+/** The mark before a skill's name: a dot for a concept, a square for a tool. */
+const KindDot = ({ node }: { node: MapNode }) => (node.kind === "skill" ? <span className={`kind-dot ${kindClass(node)}`} aria-hidden /> : null);
 const share = (n: MapNode, total: number) => (total ? n.jobs.size / total : 0);
 const meta = (n: MapNode) => (n.skills ? `${n.skills} under it` : "");
 
 function Bar({ node, total, thin }: { node: MapNode; total: number; thin?: boolean }) {
   return (
-    <span className={`map-bar ${node.kind} ${thin ? "thin" : ""}`} aria-hidden>
+    <span className={`map-bar ${kindClass(node)} ${thin ? "thin" : ""}`} aria-hidden>
       <span style={{ width: `${share(node, total) * 100}%` }} />
     </span>
   );
@@ -186,7 +190,7 @@ export function OutlineView({ roots, total, selected, onSelect, edit, collapsed,
           role="treeitem"
           aria-expanded={node.children.length ? !collapsed.has(node.key) : undefined}
           aria-selected={selected?.key === node.key}
-          className={`outline-row ${node.kind} depth-${Math.min(depth, 1)} ${selected?.key === node.key ? "selected" : ""}${faint(node)}${edit.drag.state(node)}`}
+          className={`outline-row ${kindClass(node)}${node.kind === "skill" ? " skill" : ""} depth-${Math.min(depth, 1)} ${selected?.key === node.key ? "selected" : ""}${faint(node)}${edit.drag.state(node)}`}
           onClick={() => onSelect(node.key)}
           onDoubleClick={() => node.skill && edit.onEdit(node)}
           {...edit.drag.props(node)}
@@ -220,7 +224,10 @@ export function OutlineView({ roots, total, selected, onSelect, edit, collapsed,
             ) : (
               <span className="o-chev-space" />
             )}
-            <span className="o-label">{node.name}</span>
+            <span className="o-label">
+              <KindDot node={node} />
+              {node.name}
+            </span>
             <span className="o-meta">{meta(node)}</span>
             <NodeActions node={node} edit={edit} />
           </span>
@@ -251,13 +258,16 @@ export function ColumnsView({ roots, total, selected, onSelect, edit, details }:
                 type="button"
                 role="option"
                 aria-selected={onPath}
-                className={`map-col-item ${n.kind} ${onPath ? (n.key === selected?.key ? "current" : "on-path") : ""}${faint(n)}`}
+                className={`map-col-item ${kindClass(n)}${n.kind === "skill" ? " skill" : ""} ${onPath ? (n.key === selected?.key ? "current" : "on-path") : ""}${faint(n)}`}
                 onClick={() => onSelect(n.key)}
                 onDoubleClick={() => n.skill && edit.onEdit(n)}
               >
                 <span className="map-col-text">
                   <span className="map-col-top">
-                    <span className="map-col-name">{n.name}</span>
+                    <span className="map-col-name">
+                      <KindDot node={n} />
+                      {n.name}
+                    </span>
                     <span className="map-col-count">{n.jobs.size}</span>
                   </span>
                   <Bar node={n} total={total} thin />
@@ -350,8 +360,8 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
     const style: CSSProperties | undefined =
       n.kind === "skill"
         ? {
-            background: `color-mix(in srgb, var(--accent) ${Math.round(12 + r * 70)}%, transparent)`,
-            color: r > 0.6 ? "var(--accent-text)" : "var(--text)",
+            background: `color-mix(in srgb, var(${n.tool ? "--tool" : "--accent"}) ${Math.round(12 + r * 70)}%, transparent)`,
+            color: r > 0.6 ? `var(${n.tool ? "--tool-text" : "--accent-text"})` : "var(--text)",
             fontWeight: r > 0.5 ? 700 : r > 0.25 ? 600 : 450,
             fontSize: 12.5 + r * 3,
           }
@@ -362,12 +372,13 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
           <span className="d-wrap" data-depth={depth}>
             <button
               type="button"
-              className={`d-node ${depth === 0 ? "root" : n.kind} ${selected?.key === n.key ? "selected" : ""}${faint(n)}${edit.drag.state(n)}`}
+              className={`d-node ${depth === 0 ? "root" : kindClass(n)} ${selected?.key === n.key ? "selected" : ""}${faint(n)}${edit.drag.state(n)}`}
               style={style}
               onClick={() => onSelect(n.key)}
               onDoubleClick={() => n.skill && edit.onEdit(n)}
               {...edit.drag.props(n)}
             >
+              {depth > 0 && <KindDot node={n} />}
               {n.name}
               <span className="d-count">{n.jobs.size}</span>
             </button>
@@ -393,6 +404,23 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
 
   return (
     <div className="diagram-wrap">
+      {/* The areas of the tree, one shown at a time: one row, scrolling sideways when there are many. */}
+      <div className="area-tabs" role="tablist" aria-label="Area">
+        {roots.map((n) => (
+          <button
+            key={n.key}
+            type="button"
+            role="tab"
+            aria-selected={area?.key === n.key}
+            className={`${area?.key === n.key ? "active" : ""}${edit.drag.state(n).replace(" dragging", "")}`}
+            onClick={() => onSelect(n.key)}
+            {...edit.drag.props(n, { onHold: () => area?.key !== n.key && onSelect(n.key) })}
+          >
+            {n.name}
+            {n.jobs.size > 0 && <span className="area-count">{n.jobs.size}</span>}
+          </button>
+        ))}
+      </div>
       <div
         ref={box}
         className="diagram"
@@ -401,7 +429,7 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
         onPointerUp={endPan}
         onPointerCancel={endPan}
       >
-        {/* Stays in the corners while the diagram scrolls: zoom on the left, the areas on the right. */}
+        {/* Stays in the corner while the diagram scrolls. */}
         <div className="diagram-bar">
           <div className="zoom-controls" role="group" aria-label="Zoom">
             <button type="button" className="icon" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => onZoom(clampZoom(zoom - 0.1))}>
@@ -416,21 +444,6 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
             <button type="button" className="zoom-fit" onClick={fit}>
               Fit
             </button>
-          </div>
-          <div className="area-tabs" role="tablist" aria-label="Area">
-            {roots.map((n) => (
-              <button
-                key={n.key}
-                type="button"
-                role="tab"
-                aria-selected={area?.key === n.key}
-                className={`${area?.key === n.key ? "active" : ""}${edit.drag.state(n).replace(" dragging", "")}`}
-                onClick={() => onSelect(n.key)}
-                {...edit.drag.props(n, { onHold: () => area?.key !== n.key && onSelect(n.key) })}
-              >
-                {n.name}
-              </button>
-            ))}
           </div>
         </div>
         <div ref={content} className="diagram-content" style={{ zoom }}>
@@ -538,7 +551,7 @@ export function MapDetails({
         <span className="muted">
           {node.kind === "group"
             ? `${node.skill ? "Group · " : ""}${node.jobs.size} of ${total} posting${total === 1 ? "" : "s"} ask for something in it`
-            : `Asked for in ${node.jobs.size} of ${total} posting${total === 1 ? "" : "s"}`}
+            : `${node.tool ? "Tool" : "Concept"} · Asked for in ${node.jobs.size} of ${total} posting${total === 1 ? "" : "s"}`}
           {node.skills > 0 && ` · ${meta(node)}`}
         </span>
         {skill && !skill.placed && (

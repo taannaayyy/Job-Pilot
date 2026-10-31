@@ -7,6 +7,8 @@ export interface NodeFields {
   name: string;
   description: string;
   isGroup: boolean;
+  /** A tool you can point to ("Docker"), not a concept ("Feature engineering"). */
+  isTool: boolean;
 }
 
 interface Props {
@@ -68,24 +70,25 @@ export default function NodeDialog({ title, initial, pickKind, onSave, onRemove,
             <CloseIcon />
           </button>
         </div>
-        {pickKind && (
+        {(pickKind || !initial.isGroup) && (
           <Segmented
             ariaLabel="Kind"
-            value={fields.isGroup ? "group" : "skill"}
-            onChange={(v) => set({ isGroup: v === "group" })}
+            value={fields.isGroup ? "group" : fields.isTool ? "tool" : "concept"}
+            onChange={(v) => set({ isGroup: v === "group", isTool: v === "tool" })}
             options={[
-              { value: "skill", label: "Skill" },
-              { value: "group", label: "Group" },
+              { value: "concept", label: "Concept" },
+              { value: "tool", label: "Tool" },
+              ...(pickKind ? [{ value: "group", label: "Group" }] : []),
             ]}
           />
         )}
-        {pickKind && (
-          <p className="muted small-note">
-            {fields.isGroup
-              ? "A group only organizes the tree, like Cloud. Postings are counted on the skills in it."
-              : "A skill is something postings ask for, like Docker. It can hold other skills too."}
-          </p>
-        )}
+        <p className="muted small-note">
+          {fields.isGroup
+            ? "A group only organizes the tree, like Cloud. Postings are counted on the skills in it."
+            : fields.isTool
+              ? "A tool is something you can point to, like Docker or PyTorch. Put it under the concept it is used for."
+              : "A concept is a kind of work or knowledge, like Feature engineering. Concepts and tools go under it."}
+        </p>
         <label>
           Name
           <input autoFocus value={fields.name} maxLength={200} onChange={(e) => set({ name: e.target.value })} />

@@ -599,3 +599,57 @@ def test_the_gap_says_which_words_a_skill_was_picked_from(client):
     client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "Keras", "evidence": "Keras or TensorFlow"})
     row = next(s for s in client.get("/api/skill-gap").json()["skills"] if s["name"] == "Keras")
     assert row["placed"] is False and row["quotes"] == ["Keras or TensorFlow"]
+
+
+def test_a_removed_skill_comes_back_with_undo(client):
+    _under(client, "Python", "pandas", "NumPy")
+    job, _ = target(client, connect=())
+    client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "Python", "importance": "nice", "evidence": "Python", "evidence_at": 3})
+    rows = _skills(client)
+    python = rows["Python"]
+    client.patch(f"/api/skills/{python['id']}", json={"description": "A language", "mark": "have"})
+    client.delete(f"/api/skills/{python['id']}")
+    assert "Python" not in _skills(client)
+    res = client.post("/api/skills/undo-remove")
+    assert res.status_code == 200 and res.json()["name"] == "Python"
+    rows = _skills(client)
+    # The same skill, in its place, with what was under it and its job.
+    assert rows["Python"]["id"] == python["id"] and rows["Python"]["parent_id"] == python["parent_id"]
+    assert rows["Python"]["position"] == 0 and rows["Python"]["description"] == "A language"
+    assert [rows[n]["parent_id"] for n in ("pandas", "NumPy")] == [python["id"]] * 2
+    assert [rows[n]["position"] for n in ("pandas", "NumPy", "JavaScript")] == [0, 1, 1]
+    req = next(r for r in client.get(f"/api/jobs/{job['id']}").json()["requirements"] if r["name"] == "Python")
+    assert (req["importance"], req["evidence"], req["evidence_at"], req["mark"]) == ("nice", "Python", 3, "have")
+    # Nothing left to undo.
+    assert client.post("/api/skills/undo-remove").status_code == 404
+
+
+def test_undo_brings_back_the_last_removed_first(client):
+    rows = _skills(client)
+    client.delete(f"/api/skills/{rows['AWS']['id']}")
+    client.delete(f"/api/skills/{rows['Git']['id']}")
+    assert client.post("/api/skills/undo-remove").json()["name"] == "Git"
+    assert client.post("/api/skills/undo-remove").json()["name"] == "AWS"
+    assert _skills(client)["AWS"]["parent_id"] == rows["Cloud"]["id"]
+
+
+def test_undo_skips_a_skill_added_again(client):
+    rows = _skills(client)
+    client.delete(f"/api/skills/{rows['Git']['id']}")
+    client.post("/api/skills", json={"name": "git", "parent_id": rows["DevOps"]["id"]})
+    assert client.post("/api/skills/undo-remove").status_code == 409
+    assert client.post("/api/skills/undo-remove").status_code == 404
+
+
+def test_a_skill_is_a_concept_or_a_tool(client):
+    rows = _skills(client)
+    assert rows["Docker"]["is_tool"] and rows["Python"]["is_tool"] and not rows["Software testing"]["is_tool"]
+    assert not rows["Cloud"]["is_tool"]  # a group is neither
+    rows = {s["name"]: s for s in client.post("/api/skills", json={
+        "name": "Kubernetes", "parent_id": rows["DevOps"]["id"], "is_tool": True}).json()}
+    assert rows["Kubernetes"]["is_tool"]
+    client.patch(f"/api/skills/{rows['Software testing']['id']}", json={"is_tool": True})
+    assert _skills(client)["Software testing"]["is_tool"]
+    # A group can't be a tool.
+    client.patch(f"/api/skills/{rows['Cloud']['id']}", json={"is_tool": True})
+    assert not _skills(client)["Cloud"]["is_tool"]

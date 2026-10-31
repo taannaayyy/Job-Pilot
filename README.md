@@ -53,9 +53,14 @@ A skill your tree doesn't have yet waits in **Unsorted**. The **Unsorted** butto
 
 ### The skill tree
 
-The tree starts as a general skeleton for any field: **Technologies** (programming languages, databases, cloud, DevOps, software engineering), an empty **Domain knowledge**, **Background** (experience, education, spoken languages) and **Soft skills**, hidden by default. You grow it from your own postings, general to specific (Technologies › Programming languages › Python › pandas), and only you change it.
+The tree starts as a general skeleton for any field: **Technologies** (programming languages, databases, cloud, DevOps, software engineering, with common tools like Python and Docker marked as tools), an empty **Domain knowledge**, **Background** (experience, education, spoken languages) and **Soft skills**, hidden by default. You grow it from your own postings, general to specific (Technologies › Programming languages › Python › pandas), and only you change it.
 
-- A node is a **skill**, which postings ask for and which can hold other skills (a posting can ask for Python as much as for pandas), or a **group**, like Cloud, which only organizes.
+- A node is one of three kinds, each with its own color:
+  - a **concept**, blue: a kind of work or knowledge you can't point to, like Feature engineering or Computer vision;
+  - a **tool**, teal: something you can point to, like Docker, PyTorch or YOLO. Put it under the concept it is used for, so a posting asking for PyTorch also counts for Deep learning;
+  - a **group**, outlined: it only organizes, like Cloud & infrastructure, and is never asked for itself.
+
+  Concepts and tools are both asked for by postings and can hold other skills. Choose the kind when you add or edit a node.
 - Each node counts the postings that ask for it or for anything under it. Its details say how many name it and how many name something under it, show its description and what is under it, and list the postings with the line each one asks for it in.
 - See the tree as a **diagram** of one area, an **outline** with a bar per skill, or **columns** you browse one level at a time. Search it, hide parts of it, and order skills as in the tree, by how often they are asked for, or A–Z. What no posting asks for is drawn faint; **Only asked for** hides it.
 
@@ -67,7 +72,7 @@ The page itself is the editor. Hover a node for:
 
 - **+** to add a skill or group under it;
 - the **pencil** to rename it (postings that use the old name still find it) or describe it. **Write with AI** writes a description from the skill's place in the tree, for you to edit before saving;
-- the **trash** to remove it. A skill comes off the jobs connected to it.
+- the **trash** to remove it. A skill comes off the jobs connected to it. **Undo** in the notice that appears, or Cmd+Z, brings it back while the app is open: in its place, with what was under it, its jobs and its description.
 
 Double-click a node to edit it. Drag nodes in the diagram or the outline to move them, under another node or between two. In the diagram, hold a dragged node over an area's tab to show that area, or drop it on the tab.
 
@@ -122,7 +127,7 @@ rm -rf "/Applications/Job Pilot.app" && cp -R "dist/Job Pilot.app" /Applications
 | Cmd+M | Minimize |
 | Cmd+W | Close window (quits the app) |
 | Cmd+Q | Quit |
-| Cmd+Z / Shift+Cmd+Z | Undo / Redo in text fields |
+| Cmd+Z / Shift+Cmd+Z | Undo / Redo in text fields; on Skill Gap, outside a text field, Cmd+Z brings back the last removed skill |
 | Ctrl+Cmd+F | Full screen |
 | Esc | Close the add form or the job panel |
 

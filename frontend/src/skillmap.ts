@@ -8,6 +8,8 @@ export interface MapNode {
   key: string;
   /** A group only organizes (and Unsorted is one); a skill is asked for, and can hold skills too. */
   kind: "group" | "skill";
+  /** A skill that is a tool you can point to ("Docker"), not a concept ("Feature engineering"). */
+  tool: boolean;
   name: string;
   description: string;
   children: MapNode[];
@@ -38,7 +40,7 @@ export function buildMap(skills: SkillRow[], hidden: Set<string>, query: string,
     const jobs = new Set(s.job_ids ?? []);
     kids.forEach((k) => k.jobs.forEach((j) => jobs.add(j)));
     return {
-      key: `s${s.id}`, kind: s.is_group ? "group" : "skill", name: s.name, description: s.description,
+      key: `s${s.id}`, kind: s.is_group ? "group" : "skill", tool: s.is_tool && !s.is_group, name: s.name, description: s.description,
       children: kids.sort(order), jobs, direct: s.job_ids?.length ?? 0,
       skills: kids.reduce((n, k) => n + 1 + k.skills, 0), skill: s, parent: null,
     };
@@ -62,7 +64,7 @@ export function waitingMap(skills: SkillRow[], query: string): MapNode[] {
   return skills
     .filter((s) => !s.placed && s.name.toLocaleLowerCase("tr").includes(q))
     .map((s): MapNode => ({
-      key: `s${s.id}`, kind: s.is_group ? "group" : "skill", name: s.name, description: s.description, children: [],
+      key: `s${s.id}`, kind: s.is_group ? "group" : "skill", tool: s.is_tool && !s.is_group, name: s.name, description: s.description, children: [],
       jobs: new Set(s.job_ids ?? []), direct: s.job_ids?.length ?? 0, skills: 0, skill: s, parent: null,
     }))
     .sort((a, b) => b.jobs.size - a.jobs.size || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
@@ -70,7 +72,7 @@ export function waitingMap(skills: SkillRow[], query: string): MapNode[] {
 
 /** Unsorted as a place to drop a node on: it takes the node out of the tree. */
 export const UNSORTED_TARGET: MapNode = {
-  key: UNSORTED, kind: "group", name: "Unsorted", description: "", children: [], jobs: new Set(), direct: 0, skills: 0, parent: null,
+  key: UNSORTED, kind: "group", tool: false, name: "Unsorted", description: "", children: [], jobs: new Set(), direct: 0, skills: 0, parent: null,
 };
 
 function asked(nodes: MapNode[]): MapNode[] {

@@ -124,6 +124,8 @@ class SkillRow(BaseModel):
     placed: bool
     # Only organizes ("Cloud"); never asked for itself.
     is_group: bool = False
+    # A tool you can point to ("Docker"); otherwise a concept or practice ("Feature engineering").
+    is_tool: bool = False
     mark: SkillMark | None
     plan_note: str
     jobs: int
@@ -141,7 +143,7 @@ class SkillRow(BaseModel):
 
 def _row(skill: Skill, jobs: int = 0) -> SkillRow:
     return SkillRow(id=skill.id, name=skill.name, parent_id=skill.parent_id, position=skill.position,
-                    placed=skill.placed, is_group=skill.is_group, mark=skill.mark, plan_note=skill.plan_note, jobs=jobs, must=0, nice=0,
+                    placed=skill.placed, is_group=skill.is_group, is_tool=skill.is_tool, mark=skill.mark, plan_note=skill.plan_note, jobs=jobs, must=0, nice=0,
                     years=[], details=[], description=skill.description)
 
 
@@ -255,6 +257,7 @@ def get_skill(skill_id: int, group_id: int | None = None, session: Session = Dep
 class SkillUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
+    is_tool: bool | None = None
     mark: SkillMark | None = None
     plan_note: str | None = Field(default=None, max_length=10_000)
     # Moving it: under parent_id (None: the top level), at index among its new siblings.
@@ -317,6 +320,8 @@ def update_skill(skill_id: int, body: SkillUpdate, group_id: int | None = None, 
         skill.plan_note = changes["plan_note"]
     if changes.get("description") is not None:
         skill.description = changes["description"].strip()
+    if changes.get("is_tool") is not None and not skill.is_group:
+        skill.is_tool = changes["is_tool"]
     if changes.get("name") and (name := " ".join(changes["name"].split())) != skill.name:
         key = skills.skill_key(name)
         other = find_skill(session, key)
@@ -371,6 +376,7 @@ class SkillIn(BaseModel):
     parent_id: int | None = None
     index: int | None = Field(default=None, ge=0)
     is_group: bool = False
+    is_tool: bool = False
     description: str = Field(default="", max_length=2000)
 
 
@@ -388,19 +394,91 @@ def add_skill(body: SkillIn, session: Session = Depends(get_session)):
         skill = get_or_create_skill(session, name)
     if body.description.strip():
         skill.description = body.description.strip()
+    skill.is_tool = body.is_tool and not skill.is_group
     _place(session, skill, body.parent_id, body.index)
     session.commit()
     return list_skills(session)
 
 
+# Removed skills, newest last, so the user can bring them back (Cmd+Z); kept while the app runs.
+UNDO_LIMIT = 20
+
+
+def _removed(request: Request) -> list[dict]:
+    if not hasattr(request.app.state, "removed_skills"):
+        request.app.state.removed_skills = []
+    return request.app.state.removed_skills
+
+
+def _snapshot(session: Session, skill: Skill) -> dict:
+    """All a removed skill had: its place in the tree, what was under it, its jobs and its marks."""
+    columns = ("id", "name", "key", "parent_id", "position", "placed", "is_group", "is_tool", "mark", "plan_note",
+               "description", "old_keys", "created_at")
+    return {
+        "skill": {c: getattr(skill, c) for c in columns},
+        "children": [c.id for c in _children(session, skill.id)] if skill.placed else [],
+        "requirements": [
+            {c: getattr(r, c) for c in ("job_id", "importance", "evidence", "evidence_at", "min_years", "max_years",
+                                        "detail", "source")}
+            for r in skill.requirements
+        ],
+        "events": [{c: getattr(e, c) for c in ("from_mark", "to_mark", "timestamp")} for e in skill.events],
+    }
+
+
 @router.delete("/skills/{skill_id}", response_model=list[SkillRow])
-def remove_skill(skill_id: int, session: Session = Depends(get_session)):
+def remove_skill(skill_id: int, request: Request, session: Session = Depends(get_session)):
     """Takes a skill out of the tree (its children take its place), and off every job connected to it."""
     skill = session.get(Skill, skill_id) or _missing("Skill")
+    snapshot = _snapshot(session, skill)
     _unplace(session, skill)
     session.delete(skill)
     session.commit()
+    removed = _removed(request)
+    removed.append(snapshot)
+    del removed[:-UNDO_LIMIT]
     return list_skills(session)
+
+
+class UndoOut(BaseModel):
+    name: str
+    skills: list[SkillRow]
+
+
+@router.post("/skills/undo-remove", response_model=UndoOut)
+def undo_remove(request: Request, session: Session = Depends(get_session)):
+    """Brings back the last removed skill: in its place, with what was under it and its jobs."""
+    removed = _removed(request)
+    if not removed:
+        raise HTTPException(404, "Nothing to undo")
+    snap = removed[-1]
+    data = snap["skill"]
+    if session.scalar(select(Skill).where(Skill.key == data["key"])) is not None:
+        removed.pop()
+        raise HTTPException(409, f"{data['name']} is in the tree again, so it can't be brought back")
+    fields = {k: v for k, v in data.items() if k not in ("id", "parent_id", "position", "placed")}
+    skill = Skill(**fields)
+    if session.get(Skill, data["id"]) is None:
+        skill.id = data["id"]  # the same id, so links to it keep working
+    session.add(skill)
+    session.flush()
+    if data["placed"]:
+        parent = session.get(Skill, data["parent_id"]) if data["parent_id"] is not None else None
+        parent_id = parent.id if parent is not None and parent.placed else None
+        _place(session, skill, parent_id, data["position"])
+        # What moved up when it was removed goes back under it, if it is still where it moved to.
+        for child_id in snap["children"]:
+            child = session.get(Skill, child_id)
+            if child is not None and child.placed and child.parent_id == parent_id:
+                _place(session, child, skill.id, None)
+    jobs = {j.id for j in session.scalars(select(Job).where(Job.id.in_([r["job_id"] for r in snap["requirements"]])))}
+    for r in snap["requirements"]:
+        if r["job_id"] in jobs:
+            skill.requirements.append(Requirement(**r))
+    skill.events.extend(SkillEvent(**e) for e in snap["events"])
+    session.commit()
+    removed.pop()
+    return UndoOut(name=skill.name, skills=list_skills(session))
 
 
 # ---- A skill's connections to the postings that ask for it (made on the job)

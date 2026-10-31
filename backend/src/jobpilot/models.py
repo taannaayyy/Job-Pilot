@@ -173,6 +173,8 @@ class Skill(Base):
     placed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     # Only organizes ("Cloud"): holds skills, is never asked for itself.
     is_group: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # A skill is a concept or practice ("Feature engineering") or a tool you can point to ("Docker").
+    is_tool: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     mark: Mapped[SkillMark | None] = mapped_column(String(10))
     # What the user plans to do about it: a course, a project idea.
     plan_note: Mapped[str] = mapped_column(Text, default="", server_default="")

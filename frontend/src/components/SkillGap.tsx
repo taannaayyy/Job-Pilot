@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { buildMap, findNode, UNSORTED, UNSORTED_TARGET, waitingMap, type MapNode, type MapSort } from "../skillmap";
-import { children, descendants, flat, moved } from "../tree";
+import { children, descendants, moved } from "../tree";
 import type { RoleGroup, SkillGap as Gap } from "../types";
 import { PlusIcon, SearchIcon } from "./Icons";
 import MultiFilter from "./MultiFilter";
@@ -66,7 +66,6 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
   const [naming, setNaming] = useState<{ id: number | null; name: string } | null>(null);
   // The skills waiting in Unsorted, in place of the details.
   const [unsortedOpen, setUnsortedOpen] = useState(false);
-  const layout = useRef<HTMLDivElement>(null);
   // The pop-up that adds under a node (parent; null: the top level) or edits one.
   const [dialog, setDialog] = useState<{ add: MapNode | null } | { edit: MapNode } | null>(null);
   const nodes = useMemo(() => gap?.skills ?? [], [gap]);
@@ -113,26 +112,20 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
   const selectedNode = findNode([...roots, ...waiting], selectedKey);
   const selectedInTree = findNode(roots, selectedKey);
 
-  // The pane beside the tree is never taller than the tree (--map-h): a long one scrolls on its own
-  // instead of making the page longer. Below the tree (a narrow window) only the screen limits it.
-  const mapShown = !!gap && roots.length > 0 && view !== "columns";
-  useEffect(() => {
-    const box = layout.current;
-    const main = box?.firstElementChild as HTMLElement | null;
-    if (!box || !main) return;
+  // Every view, and the pane beside it, fills the window down to the bottom (--view-h) and scrolls
+  // inside itself, so the page keeps one height whichever view is shown.
+  const area = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = area.current;
+    if (!el) return;
     const fit = () => {
-      if (main.offsetWidth > box.clientWidth - 300) box.style.removeProperty("--map-h");
-      else box.style.setProperty("--map-h", `${main.offsetHeight}px`);
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      el.style.setProperty("--view-h", `${Math.max(360, window.innerHeight - top - 20)}px`);
     };
-    // Only the tree: the pane's own size changes the layout's, which would loop.
-    const observer = new ResizeObserver(fit);
-    observer.observe(main);
+    fit();
     window.addEventListener("resize", fit);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", fit);
-    };
-  }, [mapShown]);
+    return () => window.removeEventListener("resize", fit);
+  });
 
   /** Runs a change to the tree, then shows the tree as the server has it. */
   const change = async (action: () => Promise<unknown>) => {
@@ -150,34 +143,73 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
     change(() => api.updateSkill(id, { parent_id: parent, index }, null));
   };
   const unsort = (id: number) => change(() => api.updateSkill(id, { placed: false }, null));
+  // The last removed skill, offered back for a few seconds; Cmd+Z brings it back any time.
+  const [removed, setRemoved] = useState<string | null>(null);
+  useEffect(() => {
+    if (!removed) return;
+    const timer = window.setTimeout(() => setRemoved(null), 8000);
+    return () => clearTimeout(timer);
+  }, [removed]);
   const remove = (node: MapNode) => {
     const s = node.skill;
     if (!s) return false;
     const n = node.direct;
-    const off = n ? ` It is taken off the ${n === 1 ? "posting that asks" : `${n} postings that ask`} for it, and reading them again won't add it back.` : "";
+    const off = n ? ` It is taken off the ${n === 1 ? "posting that asks" : `${n} postings that ask`} for it.` : "";
     const under = s.placed && children(nodes, s.id).length ? " What is under it moves up one level." : "";
-    if ((off || under) && !confirm(`Remove ${s.name}?${off}${under}`)) return false;
+    if ((off || under) && !confirm(`Remove ${s.name}?${off}${under} Cmd+Z brings it back.`)) return false;
     if (selectedKey === node.key) set({ selected: null });
-    change(() => api.deleteSkill(s.id));
+    change(async () => {
+      await api.deleteSkill(s.id);
+      setRemoved(s.name);
+    });
     return true;
   };
+  const undoRemove = useCallback(async () => {
+    try {
+      const { name } = await api.undoRemoveSkill();
+      setRemoved(null);
+      setError(null);
+      const back = (await api.skillGap(groupId)).skills.find((n) => n.name === name);
+      if (back) set({ selected: `s${back.id}` });
+    } catch (e) {
+      setRemoved(null);
+      // Nothing removed in this session: Cmd+Z does nothing, as anywhere else.
+      if (!(e as Error).message.includes("Nothing to undo")) setError((e as Error).message);
+    }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId, load, filters]);
+  // Cmd+Z (Ctrl+Z elsewhere) outside a text field: a text field keeps its own undo.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.key.toLowerCase() !== "z") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
+      if (document.querySelector(".overlay, .edit-pop-overlay")) return; // a pop-up is open
+      e.preventDefault();
+      undoRemove();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undoRemove]);
   const edit: TreeEdit = {
     onAdd: (parent) => setDialog({ add: parent }),
     onEdit: (node) => setDialog({ edit: node }),
     onRemove: remove,
     drag: useTreeDrag(nodes, move, unsort),
   };
-  const saveDialog = ({ name, description, isGroup }: NodeFields) => {
+  const saveDialog = ({ name, description, isGroup, isTool }: NodeFields) => {
     if (!dialog) return;
     if ("add" in dialog) {
       const parent = dialog.add?.skill?.id ?? null;
       if (dialog.add) set({ collapsed: collapsed.filter((c) => c !== dialog.add!.key) });
-      change(() => api.createSkill({ name, description, is_group: isGroup, parent_id: parent }));
+      change(() => api.createSkill({ name, description, is_group: isGroup, is_tool: isTool, parent_id: parent }));
     } else {
       const s = dialog.edit.skill!;
-      const body: { name?: string; description?: string } = {};
+      const body: { name?: string; description?: string; is_tool?: boolean } = {};
       if (name.trim() !== s.name) body.name = name;
       if (description !== s.description) body.description = description;
+      if (!isGroup && isTool !== s.is_tool) body.is_tool = isTool;
       if (Object.keys(body).length) change(() => api.updateSkill(s.id, body, null));
     }
     setDialog(null);
@@ -185,16 +217,16 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
   const total = gap?.targets ?? 0;
   const select = (key: string) => set({ selected: key });
 
-  // The top two levels of the tree, each with how many asked-for skills are in it.
+  // The areas at the top of the tree, each with how many asked-for skills are in it.
   const treeOptions = useMemo(() => {
     const asked = (id: number) => {
       const ids = new Set(descendants(nodes, id));
       return nodes.filter((n) => ids.has(n.id) && n.job_ids?.length).length;
     };
-    const options = flat(nodes)
-      .filter(({ depth }) => depth <= 1)
-      .map(({ node, depth }) => ({ value: `s${node.id}`, label: `${"   ".repeat(depth)}${node.name}`, count: asked(node.id) }));
-    return options;
+    return nodes
+      .filter((n) => n.placed && n.parent_id === null)
+      .sort((x, y) => x.position - y.position)
+      .map((n) => ({ value: `s${n.id}`, label: n.name, count: asked(n.id) }));
   }, [nodes]);
 
   const saveName = async () => {
@@ -320,26 +352,27 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           </>
         )}
         <span className="spacer" />
-        <label className="search compact">
-          <SearchIcon />
-          <input type="search" placeholder="Search skills" value={query} onChange={(e) => set({ query: e.target.value })} />
-        </label>
-        <MultiFilter
-          label="Show"
-          options={treeOptions}
-          hidden={treeOptions.map((o) => o.value).filter((v) => hiddenTree.has(v))}
-          onChange={(h) => set({ hiddenTree: h })}
-        />
-        <button
-          className={`unsorted-button${unsortedOpen ? " active" : ""}${unsortedCount ? " waiting" : ""}${edit.drag.state(UNSORTED_TARGET)}`}
-          aria-pressed={unsortedOpen}
-          onClick={() => setUnsortedOpen(!unsortedOpen)}
-          title="Skills added on jobs that aren't in your tree yet. Drop a node here to take it out of the tree."
-          {...edit.drag.props(UNSORTED_TARGET)}
-        >
-          Unsorted
-          <span className="unsorted-badge">{unsortedCount}</span>
-        </button>
+        <span className="kind-legend" aria-label="Kinds of node">
+          <span>
+            <span className="kind-dot skill" aria-hidden />
+            Concept
+          </span>
+          <span>
+            <span className="kind-dot tool" aria-hidden />
+            Tool
+          </span>
+          <span>
+            <span className="kind-dot group" aria-hidden />
+            Group
+          </span>
+        </span>
+        {gap && (
+          <span className="muted map-status">
+            {gap.targets === 0
+              ? `No target jobs${selected ? ` in ${selected.name}` : ""} yet: choose a role group under Skill Gap on any job`
+              : `${gap.targets} target posting${gap.targets === 1 ? "" : "s"}`}
+          </span>
+        )}
       </div>
 
       {error && (
@@ -355,6 +388,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           </div>
         ) : (
           <>
+            {/* How to look at the tree, then what to do with it. */}
             <div className="map-toolbar">
               <Segmented
                 ariaLabel="View"
@@ -367,39 +401,50 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
                 ]}
               />
               {view !== "diagram" && (
-                <Segmented
-                  ariaLabel="Order"
-                  value={sort}
-                  onChange={(v) => set({ sort: v })}
-                  options={[
-                    { value: "tree", label: "Tree order" },
-                    { value: "count", label: "Most asked" },
-                    { value: "name", label: "A–Z" },
-                  ]}
-                />
+                <select className="map-order" aria-label="Order" value={sort} onChange={(e) => set({ sort: e.target.value as MapSort })}>
+                  <option value="tree">Tree order</option>
+                  <option value="count">Most asked</option>
+                  <option value="name">A–Z</option>
+                </select>
               )}
+              <label className="search compact">
+                <SearchIcon />
+                <input type="search" placeholder="Search skills" value={query} onChange={(e) => set({ query: e.target.value })} />
+              </label>
+              <MultiFilter
+                label="Show"
+                options={treeOptions}
+                hidden={treeOptions.map((o) => o.value).filter((v) => hiddenTree.has(v))}
+                onChange={(h) => set({ hiddenTree: h })}
+              />
               <label className="check-chip" title="Leave out the skills no posting asks for">
                 <input type="checkbox" checked={filters.onlyAsked} onChange={(e) => set({ onlyAsked: e.target.checked })} />
                 Only asked for
               </label>
-              <button className="small" onClick={() => setDialog({ add: null })} title="Add a skill or group at the top level">
-                <PlusIcon />
-                Add at the top level
-              </button>
               <span className="spacer" />
-              <span className="muted map-status">
-                {gap.targets === 0
-                  ? `No target jobs${selected ? ` in ${selected.name}` : ""} yet: choose a role group under Skill Gap on any job`
-                  : `${gap.targets} target posting${gap.targets === 1 ? "" : "s"}`}
-              </span>
+              <button
+                className={`unsorted-button${unsortedOpen ? " active" : ""}${unsortedCount ? " waiting" : ""}${edit.drag.state(UNSORTED_TARGET)}`}
+                aria-pressed={unsortedOpen}
+                onClick={() => setUnsortedOpen(!unsortedOpen)}
+                title="Skills added on jobs that aren't in your tree yet. Drop a node here to take it out of the tree."
+                {...edit.drag.props(UNSORTED_TARGET)}
+              >
+                Unsorted
+                <span className="unsorted-badge">{unsortedCount}</span>
+              </button>
+              <button onClick={() => setDialog({ add: null })} title="Add a skill or group at the top level of the tree">
+                <PlusIcon />
+                Add
+              </button>
             </div>
 
+            <div className="map-area" ref={area}>
             {roots.length === 0 ? (
               <div className="empty">{nodes.length === 0 ? "Your tree is empty. Add a skill or group at the top level." : "Nothing matches these filters."}</div>
             ) : view === "columns" ? (
               <ColumnsView roots={roots} total={total} selected={selectedInTree} onSelect={select} edit={edit} details={side} />
             ) : (
-              <div className="map-layout" ref={layout}>
+              <div className="map-layout">
                 <div className="map-main">
                   {view === "outline" ? (
                     <OutlineView
@@ -426,17 +471,28 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
                 {side}
               </div>
             )}
+            </div>
           </>
         )}
       </main>
 
+      {removed && (
+        <div className="toast" role="status">
+          Removed {removed}
+          <button type="button" className="link" onClick={undoRemove}>
+            Undo
+          </button>
+          <kbd>⌘Z</kbd>
+        </div>
+      )}
+
       {dialog && (
         <NodeDialog
-          title={"add" in dialog ? (dialog.add ? `Add under ${dialog.add.name}` : "Add at the top level") : `Edit ${dialog.edit.kind}`}
+          title={"add" in dialog ? (dialog.add ? `Add under ${dialog.add.name}` : "Add at the top level") : `Edit ${dialog.edit.kind === "group" ? "group" : dialog.edit.tool ? "tool" : "concept"}`}
           initial={
             "add" in dialog
-              ? { name: "", description: "", isGroup: false }
-              : { name: dialog.edit.name, description: dialog.edit.description, isGroup: dialog.edit.kind === "group" }
+              ? { name: "", description: "", isGroup: false, isTool: false }
+              : { name: dialog.edit.name, description: dialog.edit.description, isGroup: dialog.edit.kind === "group", isTool: dialog.edit.tool }
           }
           pickKind={"add" in dialog}
           onSave={saveDialog}
