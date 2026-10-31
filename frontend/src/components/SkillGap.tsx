@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api";
-import { buildMap, findNode, UNSORTED, UNSORTED_TARGET, waitingMap, type MapNode, type MapSort } from "../skillmap";
+import { buildMap, findNode, lineage, UNSORTED, UNSORTED_TARGET, waitingMap, type MapNode, type MapSort } from "../skillmap";
 import { children, descendants, moved } from "../tree";
 import type { RoleGroup, SkillGap as Gap } from "../types";
-import { PlusIcon, SearchIcon } from "./Icons";
-import MultiFilter from "./MultiFilter";
+import { CheckIcon, EyeIcon, PlusIcon, SearchIcon } from "./Icons";
+import Popover from "./Popover";
 import NodeDialog, { type NodeFields } from "./NodeDialog";
 import Segmented from "./Segmented";
 import { ColumnsView, DiagramView, MapDetails, OutlineView, useTreeDrag, type TreeEdit } from "./SkillMapViews";
@@ -55,9 +56,11 @@ interface Props {
   onOpenAI: () => void;
   /** Changes whenever something outside this page may have changed the gap list. */
   refreshKey: number;
+  /** Where the page puts its lists in the app sidebar. */
+  sideSlot: HTMLElement | null;
 }
 
-export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersChange, onOpenJob, onOpenAI, refreshKey }: Props) {
+export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersChange, onOpenJob, onOpenAI, refreshKey, sideSlot }: Props) {
   const { groupId, query, view, sort, collapsed, selected: selectedKey } = filters;
   const set = (patch: Partial<GapFilters>) => onFiltersChange({ ...filters, ...patch });
   const [gap, setGap] = useState<Gap | null>(null);
@@ -70,15 +73,20 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
   const [dialog, setDialog] = useState<{ add: MapNode | null } | { edit: MapNode } | null>(null);
   const nodes = useMemo(() => gap?.skills ?? [], [gap]);
 
-  // A hidden node hides everything under it.
-  const hiddenTree = useMemo(() => {
-    const chosen =
+  // The areas the user hid (Soft skills until they choose); a hidden node hides everything under it.
+  const hiddenAreas = useMemo(
+    () =>
       filters.hiddenTree ??
-      nodes.filter((n) => n.placed && n.parent_id === null && HIDDEN_BY_DEFAULT.includes(n.name)).map((n) => `s${n.id}`);
-    return new Set(
-      chosen.flatMap((key) => (key === UNSORTED ? [UNSORTED] : descendants(nodes, Number(key.slice(1))).map((id) => `s${id}`))),
-    );
-  }, [filters.hiddenTree, nodes]);
+      nodes.filter((n) => n.placed && n.parent_id === null && HIDDEN_BY_DEFAULT.includes(n.name)).map((n) => `s${n.id}`),
+    [filters.hiddenTree, nodes],
+  );
+  const hiddenTree = useMemo(
+    () =>
+      new Set(
+        hiddenAreas.flatMap((key) => (key === UNSORTED ? [UNSORTED] : descendants(nodes, Number(key.slice(1))).map((id) => `s${id}`))),
+      ),
+    [hiddenAreas, nodes],
+  );
 
   const load = useCallback(
     () =>
@@ -111,6 +119,9 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
   // The details show a skill in Unsorted too; the views only what is in the tree.
   const selectedNode = findNode([...roots, ...waiting], selectedKey);
   const selectedInTree = findNode(roots, selectedKey);
+  // One area of the tree at a time, picked in the sidebar; a search looks through all of them.
+  const areaNode = lineage(selectedInTree)[0] ?? roots[0] ?? null;
+  const shownRoots = query.trim() ? roots : areaNode ? [areaNode] : [];
 
   // Every view, and the pane beside it, fills the window down to the bottom (--view-h) and scrolls
   // inside itself, so the page keeps one height whichever view is shown.
@@ -276,107 +287,219 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
   );
   const unsortedCount = nodes.filter((n) => !n.placed).length;
 
+  const showArea = (key: string) => {
+    set({ selected: key, hiddenTree: hiddenAreas.filter((k) => k !== key) });
+  };
+  const toggleArea = (key: string) =>
+    set({ hiddenTree: hiddenAreas.includes(key) ? hiddenAreas.filter((k) => k !== key) : [...hiddenAreas, key] });
+  const deleteGroup = async () => {
+    if (!selected || !confirm(`Delete the group ${selected.name}? Its jobs stay, they just stop being targets.`)) return;
+    try {
+      await api.deleteGroup(selected.id);
+      set({ groupId: null });
+      onGroupsChanged();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   return (
     <>
-      <div className="toolbar">
-        {/* Tabs while the names are short (every tab is as wide as the longest); a dropdown otherwise. */}
-        {groupOptions.length <= 4 && Math.max(...groupOptions.map((o) => o.label.length)) <= 22 ? (
-          <Segmented
-            ariaLabel="Role group"
-            value={groupId === null ? "all" : String(groupId)}
-            onChange={(v) => set({ groupId: v === "all" ? null : Number(v) })}
-            options={groupOptions}
-          />
-        ) : (
-          <select
-            className="group-select"
-            aria-label="Role group"
-            value={groupId === null ? "all" : String(groupId)}
-            onChange={(e) => set({ groupId: e.target.value === "all" ? null : Number(e.target.value) })}
-          >
-            {groupOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        )}
-        {naming ? (
-          <form
-            className="group-name"
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveName();
-            }}
-          >
-            <input
-              autoFocus
-              value={naming.name}
-              maxLength={100}
-              placeholder="e.g. a role you want now or later"
-              onChange={(e) => setNaming({ ...naming, name: e.target.value })}
-              onKeyDown={(e) => e.key === "Escape" && setNaming(null)}
-            />
-            <button type="submit" className="primary">
-              {naming.id === null ? "Add group" : "Rename"}
-            </button>
-            <button type="button" onClick={() => setNaming(null)}>
-              Cancel
-            </button>
-          </form>
-        ) : (
+      {sideSlot &&
+        createPortal(
           <>
-            <button onClick={() => setNaming({ id: null, name: "" })}>
-              <PlusIcon />
-              New group
-            </button>
-            {selected && (
-              <>
-                <button className="link quiet" onClick={() => setNaming({ id: selected.id, name: selected.name })}>
-                  Rename
-                </button>
-                <button
-                  className="link quiet"
-                  onClick={async () => {
-                    if (!confirm(`Delete the group ${selected.name}? Its jobs stay, they just stop being targets.`)) return;
-                    try {
-                      await api.deleteGroup(selected.id);
-                      set({ groupId: null });
-                      onGroupsChanged();
-                    } catch (e) {
-                      setError((e as Error).message);
-                    }
+            {naming ? (
+              <form
+                className="side-naming"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveName();
+                }}
+              >
+                <input
+                  autoFocus
+                  value={naming.name}
+                  maxLength={100}
+                  placeholder="e.g. a role you want now or later"
+                  onChange={(e) => setNaming({ ...naming, name: e.target.value })}
+                  onKeyDown={(e) => e.key === "Escape" && setNaming(null)}
+                />
+                <div className="row">
+                  <button type="submit" className="primary small">
+                    {naming.id === null ? "Add group" : "Rename"}
+                  </button>
+                  <button type="button" className="small" onClick={() => setNaming(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="side-group">
+                <select
+                  aria-label="Role group"
+                  value={groupId === null ? "all" : String(groupId)}
+                  onChange={(e) => {
+                    if (e.target.value === "new") return setNaming({ id: null, name: "" });
+                    set({ groupId: e.target.value === "all" ? null : Number(e.target.value) });
                   }}
                 >
-                  Delete
-                </button>
-              </>
+                  {groupOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                  <option value="new">New group…</option>
+                </select>
+                {selected && (
+                  <Popover className="icon" title={`Rename or delete ${selected.name}`} label="⋯">
+                    {(close) => (
+                      <>
+                        <button
+                          type="button"
+                          className="menu-item"
+                          onClick={() => {
+                            close();
+                            setNaming({ id: selected.id, name: selected.name });
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          className="menu-item danger"
+                          onClick={() => {
+                            close();
+                            deleteGroup();
+                          }}
+                        >
+                          Delete group
+                        </button>
+                      </>
+                    )}
+                  </Popover>
+                )}
+              </div>
             )}
-          </>
+            {treeOptions.map((o) => {
+              const hidden = hiddenAreas.includes(o.value);
+              const root = findNode(roots, o.value);
+              return (
+                <div key={o.value} className={`side-area${hidden ? " hidden" : ""}`}>
+                  <button
+                    type="button"
+                    className={`side-item${!query.trim() && areaNode?.key === o.value ? " on" : ""}${root ? edit.drag.state(root).replace(" dragging", "") : ""}`}
+                    onClick={() => showArea(o.value)}
+                    {...(root ? edit.drag.props(root, { onHold: () => areaNode?.key !== o.value && select(o.value) }) : {})}
+                  >
+                    <span className="side-label">{o.label}</span>
+                    <span className="side-count">{hidden ? "hidden" : o.count}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="icon side-eye"
+                    title={hidden ? `Show ${o.label}` : `Hide ${o.label}`}
+                    aria-label={hidden ? `Show ${o.label}` : `Hide ${o.label}`}
+                    aria-pressed={!hidden}
+                    onClick={() => toggleArea(o.value)}
+                  >
+                    <EyeIcon />
+                  </button>
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              className={`side-item unsorted-item${unsortedOpen ? " on" : ""}${unsortedCount ? " waiting" : ""}${edit.drag.state(UNSORTED_TARGET)}`}
+              aria-pressed={unsortedOpen}
+              onClick={() => setUnsortedOpen(!unsortedOpen)}
+              title="Skills added on jobs that aren't in your tree yet. Drop a node here to take it out of the tree."
+              {...edit.drag.props(UNSORTED_TARGET)}
+            >
+              <span className="side-label">Unsorted</span>
+              <span className="unsorted-badge">{unsortedCount}</span>
+            </button>
+            <span className="kind-legend" aria-label="Kinds of node">
+              <span>
+                <span className="kind-dot skill" aria-hidden />
+                Concept
+              </span>
+              <span>
+                <span className="kind-dot tool" aria-hidden />
+                Tool
+              </span>
+              <span>
+                <span className="kind-dot group" aria-hidden />
+                Group
+              </span>
+            </span>
+          </>,
+          sideSlot,
         )}
-        <span className="spacer" />
-        <span className="kind-legend" aria-label="Kinds of node">
-          <span>
-            <span className="kind-dot skill" aria-hidden />
-            Concept
-          </span>
-          <span>
-            <span className="kind-dot tool" aria-hidden />
-            Tool
-          </span>
-          <span>
-            <span className="kind-dot group" aria-hidden />
-            Group
-          </span>
-        </span>
+
+      <header className="page-head">
+        <h2>{query.trim() ? "Search" : areaNode?.name ?? "Skill Gap"}</h2>
         {gap && (
-          <span className="muted map-status">
+          <span className="muted page-summary">
             {gap.targets === 0
               ? `No target jobs${selected ? ` in ${selected.name}` : ""} yet: choose a role group under Skill Gap on any job`
-              : `${gap.targets} target posting${gap.targets === 1 ? "" : "s"}`}
+              : `${gap.targets} target posting${gap.targets === 1 ? "" : "s"}${areaNode && !query.trim() ? ` · ${areaNode.skills} skills` : ""}`}
           </span>
         )}
-      </div>
+        <span className="spacer" />
+        <label className="search compact">
+          <SearchIcon />
+          <input type="search" data-page-search placeholder="Search skills" value={query} onChange={(e) => set({ query: e.target.value })} />
+        </label>
+        <Segmented
+          ariaLabel="View"
+          value={view}
+          onChange={(v) => set({ view: v })}
+          options={[
+            { value: "diagram", label: "Diagram" },
+            { value: "outline", label: "Outline" },
+            { value: "columns", label: "Columns" },
+          ]}
+        />
+        <Popover className="icon" title="More: what to show, order, add" alignRight label="⋯">
+          {(close) => (
+            <>
+              <button type="button" className="menu-item" onClick={() => set({ onlyAsked: !filters.onlyAsked })}>
+                {filters.onlyAsked ? <CheckIcon /> : <span className="menu-gap" />}
+                Only skills postings ask for
+              </button>
+              {view !== "diagram" && (
+                <>
+                  <div className="menu-label">Order</div>
+                  {(
+                    [
+                      ["tree", "As in the tree"],
+                      ["count", "Most asked for"],
+                      ["name", "A–Z"],
+                    ] as [MapSort, string][]
+                  ).map(([v, label]) => (
+                    <button key={v} type="button" className="menu-item" onClick={() => set({ sort: v })}>
+                      {sort === v ? <CheckIcon /> : <span className="menu-gap" />}
+                      {label}
+                    </button>
+                  ))}
+                </>
+              )}
+              <div className="menu-sep" />
+              <button
+                type="button"
+                className="menu-item"
+                onClick={() => {
+                  close();
+                  setDialog({ add: null });
+                }}
+              >
+                <PlusIcon />
+                Add at the top level
+              </button>
+            </>
+          )}
+        </Popover>
+      </header>
 
       {error && (
         <div className="error banner" role="alert">
@@ -391,67 +514,17 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           </div>
         ) : (
           <>
-            {/* How to look at the tree, then what to do with it. */}
-            <div className="map-toolbar">
-              <Segmented
-                ariaLabel="View"
-                value={view}
-                onChange={(v) => set({ view: v })}
-                options={[
-                  { value: "diagram", label: "Diagram" },
-                  { value: "outline", label: "Outline" },
-                  { value: "columns", label: "Columns" },
-                ]}
-              />
-              {view !== "diagram" && (
-                <select className="map-order" aria-label="Order" value={sort} onChange={(e) => set({ sort: e.target.value as MapSort })}>
-                  <option value="tree">Tree order</option>
-                  <option value="count">Most asked</option>
-                  <option value="name">A–Z</option>
-                </select>
-              )}
-              <label className="search compact">
-                <SearchIcon />
-                <input type="search" placeholder="Search skills" value={query} onChange={(e) => set({ query: e.target.value })} />
-              </label>
-              <MultiFilter
-                label="Show"
-                options={treeOptions}
-                hidden={treeOptions.map((o) => o.value).filter((v) => hiddenTree.has(v))}
-                onChange={(h) => set({ hiddenTree: h })}
-              />
-              <label className="check-chip" title="Leave out the skills no posting asks for">
-                <input type="checkbox" checked={filters.onlyAsked} onChange={(e) => set({ onlyAsked: e.target.checked })} />
-                Only asked for
-              </label>
-              <span className="spacer" />
-              <button
-                className={`unsorted-button${unsortedOpen ? " active" : ""}${unsortedCount ? " waiting" : ""}${edit.drag.state(UNSORTED_TARGET)}`}
-                aria-pressed={unsortedOpen}
-                onClick={() => setUnsortedOpen(!unsortedOpen)}
-                title="Skills added on jobs that aren't in your tree yet. Drop a node here to take it out of the tree."
-                {...edit.drag.props(UNSORTED_TARGET)}
-              >
-                Unsorted
-                <span className="unsorted-badge">{unsortedCount}</span>
-              </button>
-              <button onClick={() => setDialog({ add: null })} title="Add a skill or group at the top level of the tree">
-                <PlusIcon />
-                Add
-              </button>
-            </div>
-
             <div className="map-area" ref={area}>
             {roots.length === 0 ? (
               <div className="empty">{nodes.length === 0 ? "Your tree is empty. Add a skill or group at the top level." : "Nothing matches these filters."}</div>
             ) : view === "columns" ? (
-              <ColumnsView roots={roots} total={total} selected={selectedInTree} onSelect={select} edit={edit} details={side} />
+              <ColumnsView roots={shownRoots} total={total} selected={selectedInTree} onSelect={select} edit={edit} details={side} />
             ) : (
               <div className="map-layout">
                 <div className="map-main">
                   {view === "outline" ? (
                     <OutlineView
-                      roots={roots}
+                      roots={shownRoots}
                       total={total}
                       selected={selectedInTree}
                       onSelect={select}
@@ -461,7 +534,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
                     />
                   ) : (
                     <DiagramView
-                      roots={roots}
+                      roots={shownRoots}
                       total={total}
                       selected={selectedInTree}
                       onSelect={select}

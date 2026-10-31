@@ -1,13 +1,13 @@
 /* Popup and settings page; same colors as the app. */
 :root {
   color-scheme: light dark;
-  --bg: #f5f6f8; --surface: #ffffff; --border: #e0e3e9; --text: #15181d; --muted: #626b7a;
-  --accent: #2f6fde; --accent-hi: #4a86f0; --ok: #15803d; --warn: #b45309; --err: #dc2626;
+  --bg: #f1ede4; --surface: #fbf9f4; --border: #d8d0bf; --text: #141414; --muted: #645f56;
+  --accent: #ff3d00; --accent-hi: #ff5a24; --ok: #15803d; --warn: #b45309; --err: #dc2626;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1115; --surface: #171a20; --border: #2a2f39; --text: #e6e8ec; --muted: #8b93a3;
-    --accent: #5b8cf5; --accent-hi: #7aa3ff; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+    --bg: #13110f; --surface: #1b1916; --border: #322e28; --text: #f1ede4; --muted: #a49d90;
+    --accent: #ff5a1f; --accent-hi: #ff7a45; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
   }
 }
 * { box-sizing: border-box; }

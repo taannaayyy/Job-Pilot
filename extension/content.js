@@ -189,25 +189,25 @@
       :host { all: initial; }
       * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       .card { display: flex; flex-direction: column; gap: 8px; align-items: stretch; max-width: 320px;
-        background: #171a20; color: #e6e8ec; border: 1px solid #2a2f39; border-radius: 14px; padding: 6px;
+        background: #1b1916; color: #f1ede4; border: 1px solid #322e28; border-radius: 14px; padding: 6px;
         box-shadow: 0 10px 30px rgba(0,0,0,.35); animation: in .22s cubic-bezier(.2,.8,.2,1); }
       @keyframes in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
       button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer;
-        font-size: 14px; font-weight: 600; border-radius: 10px; padding: 10px 14px; color: #fff; background: #2f6fde;
+        font-size: 14px; font-weight: 600; border-radius: 10px; padding: 10px 14px; color: #fff; background: #ff3d00;
         transition: background .15s, transform .1s; }
-      button:hover { background: #4a86f0; } button:active { transform: scale(.97); }
+      button:hover { background: #ff5a24; } button:active { transform: scale(.97); }
       button:disabled { cursor: default; } button:disabled:not(.done, .wait) { opacity: .7; }
       .done:disabled:hover { background: #15803d; } .wait:disabled:hover { background: #b45309; }
-      button.quiet { background: transparent; color: #8b93a3; font-weight: 500; padding: 6px 10px; }
-      button.quiet:hover { color: #e6e8ec; background: #1e222a; }
+      button.quiet { background: transparent; color: #a49d90; font-weight: 500; padding: 6px 10px; }
+      button.quiet:hover { color: #f1ede4; background: #221f1b; }
       .done { background: #15803d; } .done:hover { background: #16a34a; }
       .wait { background: #b45309; } .wait:hover { background: #d97706; }
-      .msg { font-size: 12.5px; line-height: 1.4; color: #8b93a3; padding: 0 6px 4px; }
+      .msg { font-size: 12.5px; line-height: 1.4; color: #a49d90; padding: 0 6px 4px; }
       .msg.err { color: #f87171; }
       form { display: flex; flex-direction: column; gap: 6px; padding: 4px; }
-      label { font-size: 12px; color: #8b93a3; display: flex; flex-direction: column; gap: 3px; }
-      input { font-size: 13px; padding: 7px 9px; border-radius: 8px; border: 1px solid #2a2f39; background: #0f1115; color: #e6e8ec; }
-      input:focus { outline: 2px solid #5b8cf5; outline-offset: -1px; }
+      label { font-size: 12px; color: #a49d90; display: flex; flex-direction: column; gap: 3px; }
+      input { font-size: 13px; padding: 7px 9px; border-radius: 8px; border: 1px solid #322e28; background: #13110f; color: #f1ede4; }
+      input:focus { outline: 2px solid #ff5a1f; outline-offset: -1px; }
       .row { display: flex; gap: 6px; justify-content: flex-end; }
       svg { width: 16px; height: 16px; flex: none; }
       .spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%;

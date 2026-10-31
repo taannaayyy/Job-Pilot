@@ -58,7 +58,7 @@ def _wait_until_up(server: uvicorn.Server, timeout: float = 15) -> None:
 # Renamed from theme.json, which older builds wrote on every launch.
 THEME_FILE = config.APP_SUPPORT_DIR / "ui-theme.json"
 # Window background before the page paints; matches --bg in styles.css.
-BACKGROUND = {"light": "#F5F6F8", "dark": "#0F1115"}
+BACKGROUND = {"light": "#F1EDE4", "dark": "#13110F"}
 
 
 def _load_theme() -> str:

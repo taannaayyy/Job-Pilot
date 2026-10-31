@@ -1,17 +1,18 @@
 import { useMemo } from "react";
+import { createPortal } from "react-dom";
 import { daysSince, fmtAgo } from "../format";
 import { STALE_AFTER_DAYS, linkedinJobsUrl } from "../orgs";
 import { ORG_KINDS, ORG_KIND_LABELS, type Company, type Job, type Openings, type OrgKind } from "../types";
 import CompanyLogo from "./CompanyLogo";
 import FavoriteButton from "./FavoriteButton";
 import HiringButtons from "./HiringButtons";
-import Segmented from "./Segmented";
 import { BriefcaseIcon, BuildingIcon, ExternalIcon, GlobeIcon, PlusIcon, SearchIcon, StarIcon } from "./Icons";
 
-type HiringFilter = "" | Openings | "unchecked" | "due";
+type HiringFilter = "" | Openings | "unchecked";
 type Sort = "name" | "checked" | "added";
-export type Group = "all" | "favorites";
-export const GROUPS: readonly Group[] = ["all", "favorites"];
+// "due": not checked for a while (or never), so worth a look.
+export type Group = "all" | "favorites" | "due";
+export const GROUPS: readonly Group[] = ["all", "favorites", "due"];
 
 // Kept by the app, so they survive switching to the Jobs page and back.
 export interface CompanyFilters {
@@ -34,6 +35,8 @@ interface Props {
   onToggleFavorite: (org: Company) => void;
   filters: CompanyFilters;
   onFiltersChange: (filters: CompanyFilters) => void;
+  /** Where the page puts its lists in the app sidebar. */
+  sideSlot: HTMLElement | null;
 }
 
 const isDue = (o: Company) => !o.last_checked_at || daysSince(o.last_checked_at) > STALE_AFTER_DAYS;
@@ -48,6 +51,7 @@ export default function Watchlist({
   onToggleFavorite,
   filters,
   onFiltersChange,
+  sideSlot,
 }: Props) {
   const { query, kind, hiring, sort, group } = filters;
   const set = (patch: Partial<CompanyFilters>) => onFiltersChange({ ...filters, ...patch });
@@ -67,10 +71,9 @@ export default function Watchlist({
     const q = query.trim().toLocaleLowerCase("tr");
     const list = orgs.filter(
       (o) =>
-        (group === "all" || o.watching) &&
+        (group === "all" || (group === "favorites" ? o.watching : isDue(o))) &&
         (!kind || o.kind === kind) &&
-        (!hiring ||
-          (hiring === "unchecked" ? !o.openings : hiring === "due" ? isDue(o) : o.openings === hiring)) &&
+        (!hiring || (hiring === "unchecked" ? !o.openings : o.openings === hiring)) &&
         (!q || [o.name, o.notes].some((v) => v.toLocaleLowerCase("tr").includes(q))),
     );
     const by: Record<Sort, (a: Company, b: Company) => number> = {
@@ -87,41 +90,59 @@ export default function Watchlist({
 
   return (
     <>
-      <div className="toolbar">
-        <Segmented
-          ariaLabel="Show"
-          value={group}
-          onChange={setGroup}
-          options={[
-            { value: "all", label: `All · ${orgs.length}` },
-            { value: "favorites", label: `Favorites · ${orgs.filter((o) => o.watching).length}`, icon: <StarIcon filled /> },
-          ]}
-        />
+      {sideSlot &&
+        createPortal(
+          <>
+            {(
+              [
+                ["all", "All", orgs.length],
+                ["favorites", "Favorites", orgs.filter((o) => o.watching).length],
+                ["due", "Due for a check", dueCount],
+              ] as [Group, string, number][]
+            ).map(([g, label, n]) => (
+              <button key={g} type="button" className={`side-item${group === g ? " on" : ""}`} onClick={() => setGroup(g)}>
+                {g === "favorites" && <StarIcon filled />}
+                <span className="side-label">{label}</span>
+                <span className="side-count">{n}</span>
+              </button>
+            ))}
+            <div className="side-heading">Type</div>
+            {ORG_KINDS.filter((k) => orgs.some((o) => o.kind === k)).map((k) => (
+              <button key={k} type="button" className={`side-item${kind === k ? " on" : ""}`} onClick={() => setKind(kind === k ? "" : k)}>
+                <span className="side-label">{ORG_KIND_LABELS[k]}</span>
+                <span className="side-count">{orgs.filter((o) => o.kind === k).length}</span>
+              </button>
+            ))}
+          </>,
+          sideSlot,
+        )}
+
+      <header className="page-head">
+        <h2>{group === "favorites" ? "Favorites" : group === "due" ? "Due for a check" : "All companies"}{kind ? ` · ${ORG_KIND_LABELS[kind]}` : ""}</h2>
+        <span className="muted page-summary">
+          {hiringCount} hiring · {dueCount} due for a check
+        </span>
+        <span className="spacer" />
         <label className="search compact">
           <SearchIcon />
-          <input type="search" placeholder="Search companies" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input type="search" data-page-search placeholder="Search companies" value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
-        <select value={kind} onChange={(e) => setKind(e.target.value as OrgKind | "")}>
-          <option value="">All types</option>
-          {ORG_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {ORG_KIND_LABELS[k]}
-            </option>
-          ))}
-        </select>
-        <select value={hiring} onChange={(e) => setHiring(e.target.value as HiringFilter)}>
-          <option value="">Any hiring status</option>
+        <select aria-label="Hiring" value={hiring} onChange={(e) => setHiring(e.target.value as HiringFilter)}>
+          <option value="">Hiring: any</option>
           <option value="hiring">Hiring · {hiringCount}</option>
           <option value="none">Not hiring · {orgs.filter((o) => o.openings === "none").length}</option>
           <option value="unchecked">Not checked yet · {orgs.filter((o) => !o.openings).length}</option>
-          <option value="due">Due for a check · {dueCount}</option>
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
           <option value="name">Sort by name</option>
           <option value="checked">Least recently checked</option>
           <option value="added">Recently added</option>
         </select>
-      </div>
+        <button className="primary" onClick={onAdd}>
+          <PlusIcon />
+          Add organization
+        </button>
+      </header>
 
       <main>
         {orgs.length === 0 ? (
@@ -141,7 +162,9 @@ export default function Watchlist({
           <p className="empty">
             {group === "favorites" && !orgs.some((o) => o.watching)
               ? "No favorites yet. Click Favorite on a company to add it here."
-              : "No company matches these filters."}
+              : group === "due" && dueCount === 0
+                ? "Nothing is due: every company was checked in the last two weeks."
+                : "No company matches these filters."}
           </p>
         ) : (
           <div className="org-grid">

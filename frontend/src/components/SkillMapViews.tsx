@@ -404,23 +404,6 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
 
   return (
     <div className="diagram-wrap">
-      {/* The areas of the tree, one shown at a time: one row, scrolling sideways when there are many. */}
-      <div className="area-tabs" role="tablist" aria-label="Area">
-        {roots.map((n) => (
-          <button
-            key={n.key}
-            type="button"
-            role="tab"
-            aria-selected={area?.key === n.key}
-            className={`${area?.key === n.key ? "active" : ""}${edit.drag.state(n).replace(" dragging", "")}`}
-            onClick={() => onSelect(n.key)}
-            {...edit.drag.props(n, { onHold: () => area?.key !== n.key && onSelect(n.key) })}
-          >
-            {n.name}
-            {n.jobs.size > 0 && <span className="area-count">{n.jobs.size}</span>}
-          </button>
-        ))}
-      </div>
       <div
         ref={box}
         className="diagram"
@@ -429,25 +412,25 @@ export function DiagramView({ roots, total, selected, onSelect, edit, zoom, onZo
         onPointerUp={endPan}
         onPointerCancel={endPan}
       >
-        {/* Stays in the corner while the diagram scrolls. */}
-        <div className="diagram-bar">
-          <div className="zoom-controls" role="group" aria-label="Zoom">
-            <button type="button" className="icon" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => onZoom(clampZoom(zoom - 0.1))}>
-              <MinusIcon />
-            </button>
-            <button type="button" className="zoom-level" title="Back to 100%" onClick={() => onZoom(1)}>
-              {Math.round(zoom * 100)}%
-            </button>
-            <button type="button" className="icon" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => onZoom(clampZoom(zoom + 0.1))}>
-              <PlusIcon />
-            </button>
-            <button type="button" className="zoom-fit" onClick={fit}>
-              Fit
-            </button>
-          </div>
-        </div>
         <div ref={content} className="diagram-content" style={{ zoom }}>
           {area && node(area, 0)}
+        </div>
+      </div>
+      {/* In the corner of the tree, over it, while the diagram scrolls. */}
+      <div className="diagram-bar">
+        <div className="zoom-controls" role="group" aria-label="Zoom">
+          <button type="button" className="icon" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => onZoom(clampZoom(zoom - 0.1))}>
+            <MinusIcon />
+          </button>
+          <button type="button" className="zoom-level" title="Back to 100%" onClick={() => onZoom(1)}>
+            {Math.round(zoom * 100)}%
+          </button>
+          <button type="button" className="icon" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => onZoom(clampZoom(zoom + 0.1))}>
+            <PlusIcon />
+          </button>
+          <button type="button" className="zoom-fit" onClick={fit}>
+            Fit
+          </button>
         </div>
       </div>
     </div>

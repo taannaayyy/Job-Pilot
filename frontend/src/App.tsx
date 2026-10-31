@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "./api";
 import Board from "./components/Board";
 import JobForm from "./components/JobForm";
@@ -7,19 +8,9 @@ import JobTable from "./components/JobTable";
 import ExtensionDialog from "./components/ExtensionDialog";
 import AISettingsDialog from "./components/AISettingsDialog";
 import SkillGap, { DEFAULT_GAP_FILTERS, GAP_VIEWS, type GapFilters } from "./components/SkillGap";
-import {
-  AutoIcon,
-  BoardIcon,
-  BriefcaseIcon,
-  BuildingIcon,
-  MoonIcon,
-  PlusIcon,
-  PuzzleIcon,
-  SearchIcon,
-  SunIcon,
-  TableIcon,
-  TargetIcon,
-} from "./components/Icons";
+import AppSidebar, { type Page } from "./components/AppSidebar";
+import { BoardIcon, CheckIcon, ChevronIcon, CloseIcon, PlusIcon, SearchIcon, TableIcon } from "./components/Icons";
+import Popover from "./components/Popover";
 import OrgForm from "./components/OrgForm";
 import OrgPanel from "./components/OrgPanel";
 import Segmented from "./components/Segmented";
@@ -44,7 +35,6 @@ import {
 } from "./types";
 
 type View = "board" | "table";
-type Page = "jobs" | "watchlist" | "skills";
 const PAGES: readonly Page[] = ["jobs", "watchlist", "skills"];
 
 // Saved only when the user picks a view. (Renamed from "jobpilot.view", which older builds wrote on every launch.)
@@ -310,198 +300,265 @@ export default function App() {
   const targetCount = groups.reduce((n, g) => n + g.job_count, 0);
   const openOrg = orgs.find((o) => o.id === openOrgId) ?? null;
 
+  // The page's search field: the sidebar's Search and Cmd+K go to it.
+  const focusSearch = useCallback(() => {
+    const field = document.querySelector<HTMLInputElement>("input[data-page-search]");
+    field?.focus();
+    field?.select();
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        focusSearch();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusSearch]);
+  // Where the open page puts its lists in the sidebar.
+  const [sideSlot, setSideSlot] = useState<HTMLDivElement | null>(null);
+
+  const statusCount = (s: Status) => shownJobs.filter((j) => j.status === s).length;
+  const filterChips = [
+    typeFilter && { label: "Type", value: JOB_TYPE_LABELS[typeFilter], clear: () => setTypeFilter("") },
+    modeFilter && { label: "Mode", value: WORK_MODE_LABELS[modeFilter], clear: () => setModeFilter("") },
+    locationFilter && {
+      label: "Location",
+      value: locationFilter === "istanbul" ? "Istanbul" : locationFilter === "other" ? "Other cities" : SIDE_LABELS[locationFilter],
+      clear: () => setLocationFilter(""),
+    },
+  ].filter(Boolean) as { label: string; value: string; clear: () => void }[];
+  const jobsTitle = studyOnly ? "Study only" : statusFilter ? STATUS_LABELS[statusFilter] : "All jobs";
+
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <span className="logo" aria-hidden>
-            <BoardIcon />
-          </span>
-          <h1>Job Pilot</h1>
-          <Segmented
-            ariaLabel="Page"
-            value={page}
-            onChange={setPage}
-            options={[
-              { value: "jobs", label: `Jobs · ${boardJobs.length}`, icon: <BriefcaseIcon /> },
-              { value: "watchlist", label: `Companies · ${orgs.length}`, icon: <BuildingIcon /> },
-              { value: "skills", label: `Skill Gap · ${targetCount}`, icon: <TargetIcon /> },
-            ]}
-          />
-          {page === "jobs" && (
-            <div className="stats">
-              <span className="chip">{applied} applied</span>
-              <span className="chip accent">{active} in progress</span>
-            </div>
-          )}
-        </div>
-        <div className="topbar-actions">
-          <button onClick={() => setExtensionOpen(true)} title="Save jobs from LinkedIn with the Chrome extension">
-            <PuzzleIcon />
-            Extension
-          </button>
-          <Segmented
-            ariaLabel="Theme"
-            iconOnly
-            value={theme}
-            onChange={setTheme}
-            options={[
-              { value: "system", label: "Match system", icon: <AutoIcon /> },
-              { value: "light", label: "Light", icon: <SunIcon /> },
-              { value: "dark", label: "Night", icon: <MoonIcon /> },
-            ]}
-          />
-          {page === "skills" ? null : page === "jobs" ? (
-            <button className="primary" onClick={() => setNewJob({})}>
-              <PlusIcon />
-              Add job
+    <div className="app shell">
+      <AppSidebar
+        page={page}
+        onPage={setPage}
+        counts={{ jobs: boardJobs.length, watchlist: orgs.length, skills: targetCount }}
+        slotRef={setSideSlot}
+        onSearch={focusSearch}
+        onExtension={() => setExtensionOpen(true)}
+        theme={theme}
+        onTheme={setTheme}
+      />
+      <div className="page-area">
+        {portBlockedBy && (
+          <div className="warn banner" role="status">
+            Saving from LinkedIn is off: {portBlockedBy} is using the extension's port. Quit it and reopen Job Pilot.
+            <span className="spacer" />
+            <button className="link" onClick={() => setPortBlockedBy(null)}>
+              Dismiss
             </button>
-          ) : (
-            <button className="primary" onClick={() => setCreatingOrg(true)}>
-              <PlusIcon />
-              Add organization
-            </button>
-          )}
-        </div>
-      </header>
-
-      {page === "jobs" && (
-        <div className="toolbar">
-          <Segmented
-            ariaLabel="View"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: "table", label: "Table", icon: <TableIcon /> },
-              { value: "board", label: "Board", icon: <BoardIcon /> },
-            ]}
-          />
-          <label className="search">
-            <SearchIcon />
-            <input
-              type="search"
-              placeholder="Search company, title or district"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as Status | "")}>
-            <option value="">All statuses</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as JobType | "")}>
-            <option value="">Any job type</option>
-            {JOB_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {JOB_TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
-          <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value as WorkMode | "")}>
-            <option value="">Any work mode</option>
-            {WORK_MODES.map((m) => (
-              <option key={m} value={m}>
-                {WORK_MODE_LABELS[m]}
-              </option>
-            ))}
-          </select>
-          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value as LocationFilter)}>
-            <option value="">Any location</option>
-            <optgroup label="Istanbul">
-              <option value="istanbul">All Istanbul</option>
-              <option value="anadolu">{SIDE_LABELS.anadolu}</option>
-              <option value="avrupa">{SIDE_LABELS.avrupa}</option>
-            </optgroup>
-            <option value="other">Other cities</option>
-          </select>
-          {(studyOnly || studyJobs.length > 0) && (
-            <label className="check-chip" title="Show only the jobs kept to study a role, which the board leaves out">
-              <input type="checkbox" checked={studyOnly} onChange={(e) => setStudyOnly(e.target.checked)} />
-              Study only · {studyJobs.length}
-            </label>
-          )}
-        </div>
-      )}
-
-      {portBlockedBy && (
-        <div className="warn banner" role="status">
-          Saving from LinkedIn is off: {portBlockedBy} is using the extension's port. Quit it and reopen Job Pilot.
-          <span className="spacer" />
-          <button className="link" onClick={() => setPortBlockedBy(null)}>
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {error && (
-        <div className="error banner" role="alert">
-          {error}
-          <button className="link" onClick={() => setError(null)}>
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {loading ? (
-        <main>
-          <div className="empty">
-            <span className="spinner" aria-label="Loading" />
           </div>
-        </main>
-      ) : page === "skills" ? (
-        <SkillGap
-          groups={groups}
-          onGroupsChanged={() => {
-            refreshGroups();
-            api.listJobs().then(setJobs).catch(() => {});
-          }}
-          filters={gapFilters}
-          onFiltersChange={setGapFilters}
-          onOpenJob={setOpenId}
-          onOpenAI={() => setAiOpen(true)}
-          refreshKey={gapVersion}
-        />
-      ) : page === "watchlist" ? (
-        <Watchlist
-          orgs={orgs}
-          jobs={jobs}
-          onOpen={setOpenOrgId}
-          onAdd={() => setCreatingOrg(true)}
-          onAddJob={addJobAt}
-          onSetOpenings={setOpenings}
-          onToggleFavorite={toggleFavorite}
-          filters={orgFilters}
-          onFiltersChange={setOrgFilters}
-        />
-      ) : (
-        <main>
-          {jobs.length === 0 ? (
-            <div className="empty hero">
-              <span className="logo big" aria-hidden>
-                <BoardIcon />
-              </span>
-              <p>No jobs yet. Add the first one you are looking at.</p>
-              <button className="primary" onClick={() => setNewJob({})}>
-                Add your first job
-              </button>
+        )}
+
+        {error && (
+          <div className="error banner" role="alert">
+            {error}
+            <button className="link" onClick={() => setError(null)}>
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <main>
+            <div className="empty">
+              <span className="spinner" aria-label="Loading" />
             </div>
-          ) : view === "board" ? (
-            <Board
-              jobs={filtered}
-              showInbox={shownJobs.some((j) => j.status === "inbox")}
-              statusFilter={statusFilter}
-              onOpen={setOpenId}
-              onStatusChange={changeStatus}
-            />
-          ) : (
-            <JobTable jobs={filtered} onOpen={setOpenId} onStatusChange={changeStatus} />
-          )}
-        </main>
-      )}
+          </main>
+        ) : page === "skills" ? (
+          <SkillGap
+            groups={groups}
+            onGroupsChanged={() => {
+              refreshGroups();
+              api.listJobs().then(setJobs).catch(() => {});
+            }}
+            filters={gapFilters}
+            onFiltersChange={setGapFilters}
+            onOpenJob={setOpenId}
+            onOpenAI={() => setAiOpen(true)}
+            refreshKey={gapVersion}
+            sideSlot={sideSlot}
+          />
+        ) : page === "watchlist" ? (
+          <Watchlist
+            orgs={orgs}
+            jobs={jobs}
+            onOpen={setOpenOrgId}
+            onAdd={() => setCreatingOrg(true)}
+            onAddJob={addJobAt}
+            onSetOpenings={setOpenings}
+            onToggleFavorite={toggleFavorite}
+            filters={orgFilters}
+            onFiltersChange={setOrgFilters}
+            sideSlot={sideSlot}
+          />
+        ) : (
+          <>
+            {sideSlot &&
+              createPortal(
+                <>
+                  <button
+                    type="button"
+                    className={`side-item${!statusFilter && !studyOnly ? " on" : ""}`}
+                    onClick={() => {
+                      setStatusFilter("");
+                      setStudyOnly(false);
+                    }}
+                  >
+                    <span className="side-label">All jobs</span>
+                    <span className="side-count">{boardJobs.length}</span>
+                  </button>
+                  {STATUSES.filter((s) => s !== "inbox" || statusCount(s) > 0).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`side-item${statusFilter === s ? " on" : ""}`}
+                      onClick={() => setStatusFilter(statusFilter === s ? "" : s)}
+                    >
+                      <span className="status-dot" style={{ background: `var(--st-${s})` }} aria-hidden />
+                      <span className="side-label">{STATUS_LABELS[s]}</span>
+                      <span className="side-count">{statusCount(s)}</span>
+                    </button>
+                  ))}
+                  {(studyOnly || studyJobs.length > 0) && (
+                    <button
+                      type="button"
+                      className={`side-item quiet${studyOnly ? " on" : ""}`}
+                      title="The jobs kept only to study a role, which the board leaves out"
+                      onClick={() => setStudyOnly(!studyOnly)}
+                    >
+                      <span className="side-label">Study only</span>
+                      <span className="side-count">{studyJobs.length}</span>
+                    </button>
+                  )}
+                </>,
+                sideSlot,
+              )}
+            <header className="page-head">
+              <h2>{jobsTitle}</h2>
+              <span className="muted page-summary">
+                {applied} applied · {active} in progress
+              </span>
+              <span className="spacer" />
+              <label className="search compact">
+                <SearchIcon />
+                <input
+                  type="search"
+                  data-page-search
+                  placeholder="Search company, title or district"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+              <Popover
+                className={filterChips.length ? "filtered" : ""}
+                alignRight
+                label={
+                  <>
+                    Filter{filterChips.length ? ` · ${filterChips.length}` : ""}
+                    <ChevronIcon />
+                  </>
+                }
+              >
+                {() => (
+                  <>
+                    <div className="menu-label">Job type</div>
+                    {(["", ...JOB_TYPES] as (JobType | "")[]).map((t) => (
+                      <button key={t || "any"} type="button" className="menu-item" onClick={() => setTypeFilter(t)}>
+                        {typeFilter === t ? <CheckIcon /> : <span className="menu-gap" />}
+                        {t ? JOB_TYPE_LABELS[t] : "Any"}
+                      </button>
+                    ))}
+                    <div className="menu-label">Work mode</div>
+                    {(["", ...WORK_MODES] as (WorkMode | "")[]).map((m) => (
+                      <button key={m || "any"} type="button" className="menu-item" onClick={() => setModeFilter(m)}>
+                        {modeFilter === m ? <CheckIcon /> : <span className="menu-gap" />}
+                        {m ? WORK_MODE_LABELS[m] : "Any"}
+                      </button>
+                    ))}
+                    <div className="menu-label">Location</div>
+                    {(
+                      [
+                        ["", "Any"],
+                        ["istanbul", "All Istanbul"],
+                        ["anadolu", SIDE_LABELS.anadolu],
+                        ["avrupa", SIDE_LABELS.avrupa],
+                        ["other", "Other cities"],
+                      ] as [LocationFilter, string][]
+                    ).map(([v, label]) => (
+                      <button key={v || "any"} type="button" className="menu-item" onClick={() => setLocationFilter(v)}>
+                        {locationFilter === v ? <CheckIcon /> : <span className="menu-gap" />}
+                        {label}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </Popover>
+              <Segmented
+                ariaLabel="View"
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: "board", label: "Board", icon: <BoardIcon /> },
+                  { value: "table", label: "Table", icon: <TableIcon /> },
+                ]}
+              />
+              <button className="primary" onClick={() => setNewJob({})}>
+                <PlusIcon />
+                Add job
+              </button>
+            </header>
+            {filterChips.length > 0 && (
+              <div className="filter-chips">
+                {filterChips.map((c) => (
+                  <button key={c.label} type="button" className="filter-chip" onClick={c.clear} title={`Clear ${c.label.toLowerCase()}`}>
+                    <b>{c.label}</b> {c.value}
+                    <CloseIcon />
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="link quiet"
+                  onClick={() => {
+                    setTypeFilter("");
+                    setModeFilter("");
+                    setLocationFilter("");
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            <main>
+              {jobs.length === 0 ? (
+                <div className="empty hero">
+                  <span className="logo big" aria-hidden>
+                    <BoardIcon />
+                  </span>
+                  <p>No jobs yet. Add the first one you are looking at.</p>
+                  <button className="primary" onClick={() => setNewJob({})}>
+                    Add your first job
+                  </button>
+                </div>
+              ) : view === "board" ? (
+                <Board
+                  jobs={filtered}
+                  showInbox={shownJobs.some((j) => j.status === "inbox")}
+                  statusFilter={statusFilter}
+                  onOpen={setOpenId}
+                  onStatusChange={changeStatus}
+                />
+              ) : (
+                <JobTable jobs={filtered} onOpen={setOpenId} onStatusChange={changeStatus} />
+              )}
+            </main>
+          </>
+        )}
+      </div>
 
       {newJob && (
         <JobForm

@@ -6,16 +6,17 @@ A local, single-user macOS app for tracking job applications and for seeing what
 
 ## Features
 
+- **One sidebar for the whole app.** Jobs, Companies and Skill Gap, each with its own lists folded under it (statuses, company types, the areas of your skill tree), and search, the Chrome extension and the theme at its foot. Each page has one slim header with its search, filters, view and create button.
 - **Board and table views.** Track jobs on a kanban board with drag and drop, or in a sortable table.
 - **Statuses.** A job moves through Saved, Applied, Screening, Interview, Awaiting decision (all interviews done, waiting for their answer), Offer, Rejected and Ghosted. The applied date is stamped the first time a job reaches Applied or a later stage.
 - **Job details.** Every job keeps its status history, notes, a next action, the job URL, job type (full-time, part-time, internship, contract), work mode and source.
 - **Save jobs from LinkedIn.** A Chrome extension adds a **Save to Job Pilot** button to LinkedIn job pages. One click saves the title, company, logo, location, work mode, job type and description, and the same posting is never saved twice. On a company or university page, the same button saves the company to your favorites. Whatever you save while Job Pilot is closed waits in the extension until you open the app.
 - **Skill Gap.** See what the roles you want ask for, in a skill tree you design yourself. See [Skill Gap](#skill-gap) below.
-- **Companies.** Every company you have interacted with is listed, whether it came in through a job or you added it by hand: companies, startups, research centers and universities. Star your **favorites**, open their careers page and LinkedIn jobs, and record whether they were hiring when you last checked. Companies not checked for two weeks are marked as due. "Acme AI" and "acme ai" count as the same company.
+- **Companies.** Every company you have interacted with is listed, whether it came in through a job or you added it by hand: companies, startups, research centers and universities. Star your **favorites**, open their careers page and LinkedIn jobs, and record whether they were hiring when you last checked. Companies not checked for two weeks are listed under **Due for a check**. "Acme AI" and "acme ai" count as the same company.
 - **Company logos.** Add a company's website and its logo appears next to the name; without one, it gets a colored badge with its initials. Each logo is downloaded once and kept on your Mac.
 - **Istanbul locations.** City defaults to Istanbul. Pick a district or just a side ("All of Anadolu Yakası") from a searchable list, or choose "Other city" and type it.
-- **Search and filters.** Search by company, title or district, and filter by status, job type, work mode and location.
-- **Light, night and system themes**, in a native macOS window with the usual shortcuts.
+- **Search and filters.** Search by company, title or district (Cmd+K jumps to the search of the page you're on). Pick a status in the sidebar, and job type, work mode and location from **Filter**; what you pick shows as chips you can clear.
+- **Light, night and system themes** in warm paper and ink with one signal orange, in a native macOS window with the usual shortcuts.
 
 ![Companies](docs/images/companies.png)
 
@@ -32,7 +33,7 @@ A local, single-user macOS app for tracking job applications and for seeing what
 
 ### Targets and role groups
 
-Make any job a **target** of a role group you name, like "AI Engineer (now)" or "Senior ML Engineer (in 3 years)". Its status doesn't matter. A job can also be kept **only to study the role**: it leaves the job board, and the **Study only** switch above the board shows those jobs.
+Make any job a **target** of a role group you name, like "AI Engineer (now)" or "Senior ML Engineer (in 3 years)". Its status doesn't matter. A job can also be kept **only to study the role**: it leaves the job board, and **Study only** under Jobs in the sidebar shows those jobs.
 
 ### Adding a job's skills
 
@@ -47,7 +48,7 @@ You connect each target to the skills it asks for by hand. Open the job: its des
 
 ### Unsorted
 
-A skill your tree doesn't have yet waits in **Unsorted**. The **Unsorted** button in the Skill Gap controls shows how many are waiting and opens them beside the tree, most asked for first, each with how many postings ask for it and the words it was picked from. **Place…** searches the tree for where it belongs, or drag it onto a node. To take a node out of the tree, drop it on the Unsorted button or panel.
+A skill your tree doesn't have yet waits in **Unsorted**. **Unsorted**, under Skill Gap in the sidebar, shows how many are waiting and opens them beside the tree, most asked for first, each with how many postings ask for it and the words it was picked from. **Place…** searches the tree for where it belongs, or drag it onto a node. To take a node out of the tree, drop it on Unsorted or its panel.
 
 ![Placing skills from Unsorted into the tree](docs/images/place-unsorted.gif)
 
@@ -56,14 +57,15 @@ A skill your tree doesn't have yet waits in **Unsorted**. The **Unsorted** butto
 The tree starts as a general skeleton for any field: **Technologies** (programming languages, databases, cloud, DevOps, software engineering, with common tools like Python and Docker marked as tools), an empty **Domain knowledge**, **Background** (experience, education, spoken languages) and **Soft skills**, hidden by default. You grow it from your own postings, general to specific (Technologies › Programming languages › Python › pandas), and only you change it.
 
 - A node is one of three kinds, each with its own color:
-  - a **concept**, blue: a kind of work or knowledge you can't point to, like Feature engineering or Computer vision;
-  - a **tool**, teal: something you can point to, like Docker, PyTorch or YOLO. Put it under the concept it is used for, so a posting asking for PyTorch also counts for Deep learning;
+  - a **concept**, orange: a kind of work or knowledge you can't point to, like Feature engineering or Computer vision;
+  - a **tool**, ink (near-black by day, paper-white at night): something you can point to, like Docker, PyTorch or YOLO. Put it under the concept it is used for, so a posting asking for PyTorch also counts for Deep learning;
   - a **group**, outlined: it only organizes, like Cloud & infrastructure, and is never asked for itself.
 
   Concepts and tools are both asked for by postings and can hold other skills. Choose the kind when you add or edit a node.
 - Each node counts the postings that ask for it or for anything under it. Its details say how many name it and how many name something under it, show its description and what is under it, and list the postings with the line each one asks for it in.
-- See the tree as a **diagram** of one area, picked from the row of area tabs above it, an **outline** with a bar per skill, or **columns** you browse one level at a time. Every view, and the details beside it, fills the window and scrolls on its own.
-- The page has two rows of controls. The top row picks the role group and says how many target postings there are, with the color legend. The second row has the view, the order (as in the tree, most asked for, or A–Z), search, **Show** (which top-level areas appear), **Only asked for** (hides what no posting asks for, which is otherwise drawn faint), **Unsorted** and **+ Add**.
+- Under Skill Gap in the sidebar: the role group (with New group, Rename and Delete), the **areas** of your tree with how many asked-for skills each holds (click one to open it; hover for the eye that hides it), **Unsorted**, and the color legend.
+- See the area as a **diagram**, an **outline** with a bar per skill, or **columns** you browse one level at a time; a search looks through every area. Every view, and the details beside it, fills the window and scrolls on its own; zoom sits in the diagram's corner.
+- The **⋯** menu in the header holds **Only skills postings ask for** (what no posting asks for is otherwise drawn faint), the order (as in the tree, most asked for, or A–Z) and **Add at the top level**.
 
 ![The skill tree for one role group, with a skill's details](docs/images/skill-gap.png)
 
@@ -75,7 +77,7 @@ The page itself is the editor. Hover a node for:
 - the **pencil** to rename it (postings that use the old name still find it) or describe it. **Write with AI** writes a description from the skill's place in the tree, for you to edit before saving;
 - the **trash** to remove it. A skill comes off the jobs connected to it. **Undo** in the notice that appears, or Cmd+Z, brings it back while the app is open: in its place, with what was under it, its jobs and its description.
 
-**+ Add** in the controls adds a skill or group at the top level. Double-click a node to edit it. Drag nodes in the diagram or the outline to move them, under another node or between two. In the diagram, hold a dragged node over an area's tab to show that area, or drop it on the tab.
+Double-click a node to edit it. Drag nodes in the diagram or the outline to move them, under another node or between two. Hold a dragged node over an area in the sidebar to open that area, or drop it on the area.
 
 ## AI
 
@@ -125,6 +127,7 @@ rm -rf "/Applications/Job Pilot.app" && cp -R "dist/Job Pilot.app" /Applications
 
 | Shortcut | Action |
 | --- | --- |
+| Cmd+K | Search the page you're on |
 | Cmd+M | Minimize |
 | Cmd+W | Close window (quits the app) |
 | Cmd+Q | Quit |
@@ -218,7 +221,8 @@ frontend/                React + TypeScript + Vite
     api.ts, types.ts     Calls to the backend and their types
     locations.ts         Istanbul districts by side
     skillmap.ts, tree.ts The skill tree on the Skill Gap page: counts, filters, moving nodes
-    components/          Board, table, forms, job and company panels, and Skill Gap:
+    components/          AppSidebar.tsx (the app's sidebar), Popover.tsx (Filter and ⋯ menus),
+                         board, table, forms, job and company panels, and Skill Gap:
                            SkillGap.tsx, SkillMapViews.tsx (diagram, outline, columns, details),
                            UnsortedPanel.tsx, NodeDialog.tsx, SkillSearch.tsx,
                            JobDescription.tsx and JobSkills.tsx (a job's skills)
