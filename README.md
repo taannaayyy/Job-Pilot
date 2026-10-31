@@ -47,7 +47,7 @@ You connect each target to the skills it asks for by hand. Open the job: its des
 
 ### Unsorted
 
-A skill your tree doesn't have yet waits in **Unsorted**. The **Unsorted** button on the Skill Gap page shows how many are waiting and opens them beside the tree, most asked for first, each with how many postings ask for it and the words it was picked from. **Place…** searches the tree for where it belongs, or drag it onto a node. To take a node out of the tree, drop it on the Unsorted button or panel.
+A skill your tree doesn't have yet waits in **Unsorted**. The **Unsorted** button in the Skill Gap controls shows how many are waiting and opens them beside the tree, most asked for first, each with how many postings ask for it and the words it was picked from. **Place…** searches the tree for where it belongs, or drag it onto a node. To take a node out of the tree, drop it on the Unsorted button or panel.
 
 ![Placing skills from Unsorted into the tree](docs/images/place-unsorted.gif)
 
@@ -62,7 +62,8 @@ The tree starts as a general skeleton for any field: **Technologies** (programmi
 
   Concepts and tools are both asked for by postings and can hold other skills. Choose the kind when you add or edit a node.
 - Each node counts the postings that ask for it or for anything under it. Its details say how many name it and how many name something under it, show its description and what is under it, and list the postings with the line each one asks for it in.
-- See the tree as a **diagram** of one area, an **outline** with a bar per skill, or **columns** you browse one level at a time. Search it, hide parts of it, and order skills as in the tree, by how often they are asked for, or A–Z. What no posting asks for is drawn faint; **Only asked for** hides it.
+- See the tree as a **diagram** of one area, picked from the row of area tabs above it, an **outline** with a bar per skill, or **columns** you browse one level at a time. Every view, and the details beside it, fills the window and scrolls on its own.
+- The page has two rows of controls. The top row picks the role group and says how many target postings there are, with the color legend. The second row has the view, the order (as in the tree, most asked for, or A–Z), search, **Show** (which top-level areas appear), **Only asked for** (hides what no posting asks for, which is otherwise drawn faint), **Unsorted** and **+ Add**.
 
 ![The skill tree for one role group, with a skill's details](docs/images/skill-gap.png)
 
@@ -74,7 +75,7 @@ The page itself is the editor. Hover a node for:
 - the **pencil** to rename it (postings that use the old name still find it) or describe it. **Write with AI** writes a description from the skill's place in the tree, for you to edit before saving;
 - the **trash** to remove it. A skill comes off the jobs connected to it. **Undo** in the notice that appears, or Cmd+Z, brings it back while the app is open: in its place, with what was under it, its jobs and its description.
 
-Double-click a node to edit it. Drag nodes in the diagram or the outline to move them, under another node or between two. In the diagram, hold a dragged node over an area's tab to show that area, or drop it on the tab.
+**+ Add** in the controls adds a skill or group at the top level. Double-click a node to edit it. Drag nodes in the diagram or the outline to move them, under another node or between two. In the diagram, hold a dragged node over an area's tab to show that area, or drop it on the tab.
 
 ## AI
 
