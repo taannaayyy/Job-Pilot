@@ -653,3 +653,19 @@ def test_a_skill_is_a_concept_or_a_tool(client):
     # A group can't be a tool.
     client.patch(f"/api/skills/{rows['Cloud']['id']}", json={"is_tool": True})
     assert not _skills(client)["Cloud"]["is_tool"]
+
+
+def test_claude_code_from_npm_on_windows_runs_its_node_script(tmp_path, monkeypatch):
+    """npm installs claude.cmd on Windows; it runs through cmd.exe, so the Node script is started instead."""
+    assert ai._launcher("/usr/local/bin/claude") == ["/usr/local/bin/claude"]
+    folder = tmp_path / "npm"
+    script = folder / "node_modules" / "@anthropic-ai" / "claude-code" / "cli.js"
+    script.parent.mkdir(parents=True)
+    script.write_text("")
+    (folder / "node.exe").write_text("")
+    assert ai._launcher(str(folder / "claude.cmd")) == [str(folder / "node.exe"), str(script)]
+    # No Node.js anywhere: says so.
+    (folder / "node.exe").unlink()
+    monkeypatch.setattr(ai.shutil, "which", lambda name: None)
+    with pytest.raises(ai.AIError, match="Node.js"):
+        ai._launcher(str(folder / "claude.cmd"))

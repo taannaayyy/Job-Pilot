@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import urllib.error
@@ -204,8 +205,14 @@ class Claude(Provider):
         return "".join(b.text for b in response.content if b.type == "text")
 
 
-# An app opened from /Applications doesn't get the shell's PATH, so `which` alone can miss it.
-_CLAUDE_PLACES = ("~/.local/bin/claude", "~/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude")
+# An app opened from /Applications (or the Start menu) doesn't get the shell's PATH, so `which` alone can miss it.
+_CLAUDE_PLACES = (
+    ("~/.local/bin/claude.exe", "~/.claude/local/claude.exe", "~/AppData/Roaming/npm/claude.cmd")
+    if sys.platform == "win32"
+    else ("~/.local/bin/claude", "~/.claude/local/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude")
+)
+# Where to log in to Claude Code from.
+_SHELL = "PowerShell" if sys.platform == "win32" else "Terminal"
 # How long the model thinks before answering; more takes longer and uses more of the plan.
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 CLAUDE_CODE_MODELS = [
@@ -219,7 +226,24 @@ CLAUDE_CODE_MODELS = [
 
 
 def _run_cli(cmd: list[str], prompt: str, cwd: str, env: dict) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd=cwd, env=env)
+    # No console window flashing up on Windows.
+    flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
+    return subprocess.run(
+        cmd, input=prompt, capture_output=True, text=True, encoding="utf-8", timeout=TIMEOUT, cwd=cwd, env=env, creationflags=flags
+    )
+
+
+def _launcher(binary: str) -> list[str]:
+    """How to start Claude Code. npm installs it on Windows as claude.cmd, which runs through cmd.exe
+    and would mangle multi-line arguments, so the Node script behind it is started directly."""
+    if not binary.lower().endswith((".cmd", ".bat")):
+        return [binary]
+    folder = os.path.dirname(binary)
+    script = os.path.join(folder, "node_modules", "@anthropic-ai", "claude-code", "cli.js")
+    node = os.path.join(folder, "node.exe") if os.path.isfile(os.path.join(folder, "node.exe")) else shutil.which("node")
+    if not node or not os.path.isfile(script):
+        raise AIError("Claude Code was installed with npm, but Node.js or its files can't be found. Reinstall it, or set its path in the AI settings.")
+    return [node, script]
 
 
 class ClaudeCode(Provider):
@@ -263,7 +287,7 @@ class ClaudeCode(Provider):
     def _run(self, text: str, system: str) -> dict:
         binary = self.binary()
         cmd = [
-            binary, "-p", "--output-format", "json",
+            *_launcher(binary), "-p", "--output-format", "json",
             "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence",
             "--disable-slash-commands", "--system-prompt", system,
         ]
@@ -294,7 +318,7 @@ def _cli_error(message: str) -> str:
     text = message.strip().splitlines()[0][:300] if message.strip() else "Claude Code couldn't answer."
     lowered = text.lower()
     if any(w in lowered for w in ("not logged in", "log in", "login", "authenticat", "invalid api key", "oauth")):
-        return "Claude Code isn't logged in. Run claude once in Terminal and log in."
+        return f"Claude Code isn't logged in. Run claude once in {_SHELL} and log in."
     if any(w in lowered for w in ("usage limit", "rate limit", "limit reached", "out of extra usage")):
         return "Claude Code usage limit reached. Try again later."
     return f"Claude Code: {text}"
