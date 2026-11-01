@@ -2,6 +2,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 
 import anthropic
 import httpx2
@@ -160,7 +161,9 @@ def test_api_keys_are_never_sent_back(client, tmp_path):
     assert body["providers"]["anthropic"] == {"model": "claude-haiku-5-5", "has_key": True}
     path = tmp_path / "ai-settings.json"
     assert json.loads(path.read_text())["providers"]["anthropic"]["api_key"] == "sk-secret"
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    # Only its owner can read it. Windows has no such mode bits: %APPDATA% is private to the user already.
+    if sys.platform != "win32":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
     # Leaving the key out keeps it; an empty key removes it.
     client.put("/api/ai/settings", json={"provider": "ollama", "providers": {"anthropic": {"model": "claude-opus-5-5"}}})
