@@ -1,0 +1,44 @@
+# Builds the Windows installer on GitHub's Windows machines: on every push to windows-support or main,
+# and on demand (Actions > Windows build > Run workflow). The installer is attached to the run as
+# "JobPilot-Windows". It is unsigned, so Windows shows a SmartScreen warning the first time.
+name: Windows build
+
+on:
+  push:
+    branches: [windows-support, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install the UI's packages
+        working-directory: frontend
+        run: npm ci
+
+      - name: Test the backend
+        working-directory: backend
+        run: uv run pytest -q
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build the app and the installer
+        shell: pwsh
+        run: ./packaging/build_windows.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JobPilot-Windows
+          path: dist/JobPilot-Setup-*.exe
+          if-no-files-found: error

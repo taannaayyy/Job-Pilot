@@ -1,6 +1,6 @@
 # Job Pilot
 
-A local, single-user macOS app for tracking job applications and for seeing what the roles you want require. Everything stays on your Mac in one SQLite file. There are no accounts and no cloud, and nothing runs in the background.
+A local, single-user app for macOS and Windows for tracking job applications and for seeing what the roles you want require. Everything stays on your computer in one SQLite file. There are no accounts and no cloud, and nothing runs in the background.
 
 ![The job board](docs/images/board.png)
 
@@ -15,8 +15,8 @@ A local, single-user macOS app for tracking job applications and for seeing what
 - **Companies.** Every company you have interacted with is listed, whether it came in through a job or you added it by hand: companies, startups, research centers and universities. Star your **favorites**, open their careers page and LinkedIn jobs, and record whether they were hiring when you last checked. Companies not checked for two weeks are listed under **Due for a check**. "Acme AI" and "acme ai" count as the same company.
 - **Company logos.** Add a company's website and its logo appears next to the name; without one, it gets a colored badge with its initials. Each logo is downloaded once and kept on your Mac.
 - **Istanbul locations.** City defaults to Istanbul. Pick a district or just a side ("All of Anadolu Yakası") from a searchable list, or choose "Other city" and type it.
-- **Search and filters.** Search by company, title or district (Cmd+K jumps to the search of the page you're on). Pick a status in the sidebar, and job type, work mode and location from **Filter**; what you pick shows as chips you can clear.
-- **Light, night and system themes** in warm paper and ink with one signal orange, in a native macOS window with the usual shortcuts.
+- **Search and filters.** Search by company, title or district (Cmd+K, or Ctrl+K on Windows, jumps to the search of the page you're on). Pick a status in the sidebar, and job type, work mode and location from **Filter**; what you pick shows as chips you can clear.
+- **Light, night and system themes** in warm paper and ink with one signal orange, in a native window (macOS or Windows) with the usual shortcuts.
 
 ![Companies](docs/images/companies.png)
 
@@ -75,7 +75,7 @@ The page itself is the editor. Hover a node for:
 
 - **+** to add a skill or group under it;
 - the **pencil** to rename it (postings that use the old name still find it) or describe it. **Write with AI** writes a description from the skill's place in the tree, for you to edit before saving;
-- the **trash** to remove it. A skill comes off the jobs connected to it. **Undo** in the notice that appears, or Cmd+Z, brings it back while the app is open: in its place, with what was under it, its jobs and its description.
+- the **trash** to remove it. A skill comes off the jobs connected to it. **Undo** in the notice that appears, or Cmd+Z (Ctrl+Z on Windows), brings it back while the app is open: in its place, with what was under it, its jobs and its description.
 
 Double-click a node to edit it. Drag nodes in the diagram or the outline to move them, under another node or between two. Hold a dragged node over an area in the sidebar to open that area, or drop it on the area.
 
@@ -92,6 +92,8 @@ API keys stay on your Mac in a file only you can read.
 
 ## Install
 
+### macOS
+
 Requires [uv](https://docs.astral.sh/uv/) and Node 20+.
 
 ```sh
@@ -102,10 +104,27 @@ cp -R "dist/Job Pilot.app" /Applications/
 
 Open **Job Pilot** from Spotlight or Launchpad.
 
+### Windows
+
+Windows 10 or 11. The installer is built on GitHub's Windows machines on every push to `main`:
+
+1. On GitHub, open **Actions › Windows build**, pick the latest run and download **JobPilot-Windows** under Artifacts. Unzip it.
+2. Run `JobPilot-Setup-<version>.exe`. The installer isn't signed, so Windows shows **"Windows protected your PC"**: click **More info**, then **Run anyway**. It installs for your user only, with no administrator rights, and adds Job Pilot to the Start menu.
+3. Open **Job Pilot** from the Start menu.
+
+To build it yourself on Windows, install [uv](https://docs.astral.sh/uv/), Node 20+ and [Inno Setup 6](https://jrsoftware.org/isinfo.php), then in PowerShell:
+
+```powershell
+cd frontend; npm install; cd ..
+.\packaging\build_windows.ps1
+```
+
+This makes `dist\Job Pilot\Job Pilot.exe` and the installer `dist\JobPilot-Setup-<version>.exe`. The window uses Microsoft Edge WebView2, which comes with Windows 10 and 11.
+
 ### Chrome extension
 
-1. In Job Pilot, click **Extension** at the top, then **Open Chrome**. Chrome opens its extensions page, and the extension's folder location is copied for you.
-2. In Chrome, turn on **Developer mode**, click **Load unpacked**, press Shift+Cmd+G, paste with Cmd+V, press Return and click **Select**.
+1. In Job Pilot, click **Extension** at the foot of the sidebar, then **Open Chrome**. Chrome opens its extensions page, and the extension's folder location is copied for you.
+2. In Chrome, turn on **Developer mode** and click **Load unpacked**. On macOS press Shift+Cmd+G, paste with Cmd+V, press Return and click **Select**; on Windows press Ctrl+L, paste with Ctrl+V, press Enter and click **Select Folder**.
 3. The extension's settings open. Paste the key shown in Job Pilot's Extension dialog and click Save.
 
 Chrome doesn't let apps install extensions themselves, so this is done once by hand. Publishing to the Chrome Web Store, which would make it a one-click install, is planned.
@@ -116,7 +135,7 @@ The app runs only while its window is open. Closing the window stops it complete
 
 The app listens on port 8765, where the extension looks for it. If another program already uses that port, Job Pilot says which one and lets you quit or open anyway. If you open anyway, everything works except saving from LinkedIn, which waits until the port is free.
 
-To update after code changes, rebuild and replace the installed copy:
+To update after code changes on macOS, rebuild and replace the installed copy (on Windows, run the new installer over the old one):
 
 ```sh
 ./packaging/build_app.sh
@@ -125,23 +144,26 @@ rm -rf "/Applications/Job Pilot.app" && cp -R "dist/Job Pilot.app" /Applications
 
 ### Keyboard shortcuts
 
-| Shortcut | Action |
-| --- | --- |
-| Cmd+K | Search the page you're on |
-| Cmd+M | Minimize |
-| Cmd+W | Close window (quits the app) |
-| Cmd+Q | Quit |
-| Cmd+Z / Shift+Cmd+Z | Undo / Redo in text fields; on Skill Gap, outside a text field, Cmd+Z brings back the last removed skill |
-| Ctrl+Cmd+F | Full screen |
-| Esc | Close the add form or the job panel |
+| macOS | Windows | Action |
+| --- | --- | --- |
+| Cmd+K | Ctrl+K | Search the page you're on |
+| Cmd+M | Win+Down | Minimize |
+| Cmd+W | Alt+F4 | Close window (quits the app) |
+| Cmd+Q | Alt+F4 | Quit |
+| Cmd+Z / Shift+Cmd+Z | Ctrl+Z / Ctrl+Y | Undo / Redo in text fields; on Skill Gap, outside a text field, undo brings back the last removed skill |
+| Ctrl+Cmd+F | Win+Up | Full screen (maximize on Windows) |
+| Esc | Esc | Close the add form or the job panel |
 
 ## Your data
 
 Jobs are stored in:
 
 ```
-~/Library/Application Support/JobPilot/jobpilot.db
+macOS:    ~/Library/Application Support/JobPilot/jobpilot.db
+Windows:  %APPDATA%\JobPilot\jobpilot.db
 ```
+
+Uninstalling the app leaves this folder in place.
 
 Downloaded company logos are kept in the `logos` folder next to it and are downloaded again if deleted.
 
@@ -154,7 +176,8 @@ To back up, copy `jobpilot.db`. The app and the development server both use this
 Run the backend and the UI with live reload:
 
 ```sh
-./dev.sh
+./dev.sh          # macOS
+.\dev.ps1         # Windows, in PowerShell
 ```
 
 Then open http://127.0.0.1:5173.
@@ -195,7 +218,7 @@ Migrations run automatically when the backend starts, in both the app and `dev.s
 
 ### App icon
 
-The icon is drawn in `packaging/icon.svg`. After editing it, run `./packaging/make_icon.sh` to regenerate `icon.icns`. This needs Google Chrome.
+The icon is drawn in `packaging/icon.svg`. After editing it, run `./packaging/make_icon.sh` on a Mac to regenerate `icon.icns` and `icon.ico`. This needs Google Chrome and ImageMagick.
 
 ## Project structure
 
@@ -212,7 +235,7 @@ backend/                 Python: FastAPI, SQLAlchemy, Alembic (managed with uv)
     logos.py             Fetches and caches company logos
     models.py            Database tables
     desktop.py           Native window: backend thread, port, size, theme
-    system/              Everything that depends on the OS: macos.py, generic.py (fallback)
+    system/              Everything that depends on the OS: macos.py, windows.py, generic.py (Linux fallback)
     migrations/          Alembic migrations
   tests/
 frontend/                React + TypeScript + Vite
@@ -230,8 +253,10 @@ frontend/                React + TypeScript + Vite
 extension/               Chrome extension (Manifest V3)
   content.js             Button on LinkedIn job and company pages, reads the open page
   background.js          Queue while the app is closed, delivery to the app
-packaging/               PyInstaller spec, build script, icon
-dev.sh                   Runs backend + UI for development
+packaging/               PyInstaller spec, build scripts (build_app.sh, build_windows.ps1), icons,
+                         windows/installer.iss (the Windows installer)
+.github/workflows/       windows.yml: builds the Windows installer on GitHub
+dev.sh, dev.ps1          Run backend + UI for development (macOS, Windows)
 ```
 
 ## Stack

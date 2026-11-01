@@ -1,5 +1,6 @@
 #!/bin/sh
-# Renders icon.svg to icon.icns with headless Chrome + iconutil. Only needed when the icon changes.
+# Renders icon.svg to icon.icns (macOS) and icon.ico (Windows) with headless Chrome, iconutil and
+# ImageMagick. Only needed when the icon changes.
 set -e
 cd "$(dirname "$0")"
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -14,5 +15,7 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$tmp/icon.iconset" -o icon.icns
 cp "$tmp/icon_1024.png" icon.png
+# The Windows icon (several sizes in one file), with ImageMagick.
+magick icon.png -define icon:auto-resize=256,128,64,48,32,24,16 icon.ico
 rm -rf "$tmp"
-echo "wrote packaging/icon.icns"
+echo "wrote packaging/icon.icns and packaging/icon.ico"
