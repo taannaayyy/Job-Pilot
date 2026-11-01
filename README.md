@@ -1,5 +1,19 @@
 # Job Pilot
 
+## Why I built this
+
+Looking for a job means juggling a lot at once: the postings I've applied to, the ones I'm still considering, interviews at different stages, and the companies I'd love to work at someday but that aren't hiring for my role yet. I kept all of this in scattered notes, tabs and spreadsheets, and lost track of it.
+
+Job Pilot is the tool I built to make that process easier and to manage it more effectively:
+
+- **One place for every application.** Each job I save, from LinkedIn or by hand, moves through its stages on one board, with its history, notes and next step.
+- **Companies I want to work at someday.** I keep a list of the companies, startups, research centers and universities I'm interested in, and check back on whether they're hiring.
+- **What it takes to get the job I want.** For the roles I'm aiming at, now or in a few years, I collect the skills their postings ask for. I organize them in my own skill tree, so I can see what matters most and what to learn next.
+
+I built it for my own search, and it runs entirely on my computer.
+
+## What it is
+
 A local, single-user macOS app for tracking job applications and for seeing what the roles you want require. Everything stays on your Mac in one SQLite file. There are no accounts and no cloud, and nothing runs in the background.
 
 ![The job board](docs/images/board.png)
