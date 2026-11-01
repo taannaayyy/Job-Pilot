@@ -6,6 +6,7 @@ and quits. Nothing starts at login.
 
 import json
 import socket
+import sys
 import threading
 import time
 
@@ -19,9 +20,14 @@ from jobpilot.main import WEB_DIR, create_app
 def _free_port(port: int) -> int | None:
     """The port if it can be bound (0 picks any free one), otherwise None."""
     with socket.socket() as s:
-        # Like uvicorn: connections from a just-closed app linger on the port (TIME_WAIT)
-        # but don't stop a new server from listening there.
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if sys.platform == "win32":
+            # On Windows SO_REUSEADDR would let us bind next to a program already listening on
+            # the port; this asks for the port to ourselves instead.
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            # Like uvicorn: connections from a just-closed app linger on the port (TIME_WAIT)
+            # but don't stop a new server from listening there.
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind(("127.0.0.1", port))
         except OSError:

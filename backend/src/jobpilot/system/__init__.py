@@ -1,7 +1,7 @@
 """Everything that depends on the operating system, behind one set of functions.
 
-`macos` is the real implementation. `generic` is a plain fallback for other systems and the
-starting point for a Windows version. The rest of the app only calls the functions listed here:
+`macos` and `windows` are the real implementations; `generic` is a plain fallback for other systems
+(Linux). The rest of the app only calls the functions listed here:
 
     data_dir()                    folder for the database, logos and settings
     port_holder(port)             name of the program listening on a port, if known
@@ -21,5 +21,7 @@ import sys
 
 if sys.platform == "darwin":
     from jobpilot.system.macos import *  # noqa: F403
+elif sys.platform == "win32":
+    from jobpilot.system.windows import *  # noqa: F403
 else:
     from jobpilot.system.generic import *  # noqa: F403

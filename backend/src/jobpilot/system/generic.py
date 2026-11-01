@@ -1,14 +1,13 @@
-"""Fallback for systems without their own module yet (Windows, Linux).
+"""Fallback for systems without their own module (Linux).
 
-Everything works, with less polish than on macOS: no native "port in use" dialog (the app
-opens on another port and the UI banner explains why), no theme for the window frame, and
-the default window size. A Windows module would replace these one by one.
+Everything works, with less polish than on macOS and Windows: no native "port in use" dialog (the
+app opens on another port and the UI banner explains why), no theme for the window frame, and the
+default window size.
 """
 
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 __all__ = [
@@ -28,8 +27,6 @@ __all__ = [
 
 
 def data_dir() -> Path:
-    if sys.platform == "win32":
-        return Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "JobPilot"
     return Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "JobPilot"
 
 
@@ -63,10 +60,6 @@ def apply_appearance(mode: str) -> None:
 
 def _chrome_path() -> str | None:
     candidates = [shutil.which(name) for name in ("chrome", "google-chrome", "google-chrome-stable")]
-    if sys.platform == "win32":
-        for base in (os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)"), os.environ.get("LOCALAPPDATA")):
-            if base:
-                candidates.append(str(Path(base) / "Google" / "Chrome" / "Application" / "chrome.exe"))
     return next((c for c in candidates if c and Path(c).is_file()), None)
 
 
@@ -80,12 +73,11 @@ def open_in_chrome(url: str) -> None:
 
 
 def copy_to_clipboard(text: str) -> None:
-    if sys.platform == "win32":
-        subprocess.run(["clip"], input=text.encode("utf-16-le"), check=False)
+    if copier := shutil.which("wl-copy") or shutil.which("xclip"):
+        args = [copier] if copier.endswith("wl-copy") else [copier, "-selection", "clipboard"]
+        subprocess.run(args, input=text.encode(), check=False)
 
 
 def reveal(path: Path) -> None:
-    if sys.platform == "win32":
-        subprocess.run(["explorer", f"/select,{path}"], check=False)
-    elif opener := shutil.which("xdg-open"):
+    if opener := shutil.which("xdg-open"):
         subprocess.run([opener, str(path.parent)], check=False)
