@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FILE_MANAGER, IS_MAC } from "../platform";
 import { api } from "../api";
 import type { ExtensionInfo } from "../types";
 import { useClosing } from "../useClosing";
@@ -111,10 +112,17 @@ export default function ExtensionDialog({ onClose }: Props) {
               <li>
                 Click <b>Load unpacked</b> (top left)
               </li>
-              <li>
-                Press <kbd>⇧⌘G</kbd>, then <kbd>⌘V</kbd> and <kbd>Return</kbd>,
-                and click <b>Select</b>
-              </li>
+              {IS_MAC ? (
+                <li>
+                  Press <kbd>⇧⌘G</kbd>, then <kbd>⌘V</kbd> and <kbd>Return</kbd>,
+                  and click <b>Select</b>
+                </li>
+              ) : (
+                <li>
+                  Press <kbd>Ctrl+L</kbd>, then <kbd>Ctrl+V</kbd> and <kbd>Enter</kbd>,
+                  and click <b>Select Folder</b>
+                </li>
+              )}
             </ol>
             {info?.folder_available && (
               <div className="row">
@@ -141,7 +149,7 @@ export default function ExtensionDialog({ onClose }: Props) {
                   onClick={run(api.revealExtension)}
                 >
                   <FolderIcon />
-                  Show in Finder
+                  Show in {FILE_MANAGER}
                 </button>
               </div>
             )}

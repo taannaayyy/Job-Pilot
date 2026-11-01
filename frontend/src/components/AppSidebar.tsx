@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { shortcut } from "../platform";
 import type { Theme } from "../theme";
 import { AutoIcon, BoardIcon, BriefcaseIcon, BuildingIcon, MoonIcon, PuzzleIcon, SearchIcon, SunIcon, TargetIcon } from "./Icons";
 import Segmented from "./Segmented";
@@ -11,7 +12,7 @@ interface Props {
   counts: Record<Page, number>;
   /** Where the open page puts its own lists (statuses, types, areas), under its name. */
   slotRef: (el: HTMLDivElement | null) => void;
-  /** Focuses the open page's search field (also Cmd+K). */
+  /** Focuses the open page's search field (also Cmd+K, or Ctrl+K). */
   onSearch: () => void;
   onExtension: () => void;
   theme: Theme;
@@ -50,7 +51,7 @@ export default function AppSidebar({ page, onPage, counts, slotRef, onSearch, on
         <button type="button" className="side-item" onClick={onSearch} title="Search this page">
           <SearchIcon />
           <span className="side-label">Search</span>
-          <kbd>⌘K</kbd>
+          <kbd>{shortcut("K")}</kbd>
         </button>
         <button type="button" className="side-item" onClick={onExtension} title="Save jobs from LinkedIn with the Chrome extension">
           <PuzzleIcon />

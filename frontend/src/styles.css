@@ -44,7 +44,7 @@
   --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
 
   color-scheme: light;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "Inter", "Helvetica Neue", sans-serif;
   font-size: 14px;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -1015,7 +1015,7 @@ label.inline { margin-top: 12px; max-width: 200px; }
 .ext-note { display: inline-flex; align-items: center; gap: 5px; color: var(--success); font-size: 13px; animation: fade-in 0.2s ease both; }
 button.link.quiet { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--muted); padding: 0; }
 button.link.quiet:hover { color: var(--text); }
-.ext-key { flex: 1; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+.ext-key { flex: 1; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
 
 /* ---------- Skill Gap ---------- */
 

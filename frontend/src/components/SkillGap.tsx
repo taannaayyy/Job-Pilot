@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api";
+import { shortcut } from "../platform";
 import { buildMap, findNode, lineage, UNSORTED, UNSORTED_TARGET, waitingMap, type MapNode, type MapSort } from "../skillmap";
 import { children, descendants, moved } from "../tree";
 import type { RoleGroup, SkillGap as Gap } from "../types";
@@ -167,7 +168,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
     const n = node.direct;
     const off = n ? ` It is taken off the ${n === 1 ? "posting that asks" : `${n} postings that ask`} for it.` : "";
     const under = s.placed && children(nodes, s.id).length ? " What is under it moves up one level." : "";
-    if ((off || under) && !confirm(`Remove ${s.name}?${off}${under} Cmd+Z brings it back.`)) return false;
+    if ((off || under) && !confirm(`Remove ${s.name}?${off}${under} ${shortcut("Z")} brings it back.`)) return false;
     if (selectedKey === node.key) set({ selected: null });
     change(async () => {
       await api.deleteSkill(s.id);
@@ -558,7 +559,7 @@ export default function SkillGap({ groups, onGroupsChanged, filters, onFiltersCh
           <button type="button" className="link" onClick={undoRemove}>
             Undo
           </button>
-          <kbd>⌘Z</kbd>
+          <kbd>{shortcut("Z")}</kbd>
         </div>
       )}
 
