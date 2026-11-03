@@ -71,7 +71,7 @@ def _to_out(job: Job, model: type[JobOut] = JobOut) -> JobOut:
             RequirementOut(
                 id=r.id, skill_id=r.skill_id, name=r.skill.name,
                 importance=r.importance, evidence=r.evidence, evidence_at=r.evidence_at, source=r.source, mark=r.skill.mark,
-                min_years=r.min_years, max_years=r.max_years, detail=r.detail,
+                min_years=r.min_years, max_years=r.max_years, detail=r.detail, note=r.note,
             )
             for r in sorted(job.requirements, key=lambda r: (r.importance != "must", r.skill.name.casefold()))
         ]
@@ -152,7 +152,7 @@ def update_job(job_id: int, body: JobUpdate, session: Session = Depends(get_sess
         if status is not None:
             _set_status(job, JobStatus(status))
     for field, value in changes.items():
-        if field in ("title", "notes", "study_only") and value is None:
+        if field in ("title", "notes", "study_only", "highlights") and value is None:
             continue
         setattr(job, field, value)
     job.city, job.side, job.district = normalize_location(job.city, job.side, job.district)

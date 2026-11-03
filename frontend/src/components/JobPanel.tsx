@@ -213,9 +213,26 @@ export default function JobPanel({ jobId, onClose, onSaved, onDeleted, onWatchCh
                       return false;
                     }
                   }}
+                  highlights={job.highlights}
+                  onHighlightsChange={async (highlights) => {
+                    try {
+                      applySkills(await api.updateJob(jobId, { highlights }));
+                    } catch (err) {
+                      setError((err as Error).message);
+                    }
+                  }}
                   onAddWords={job.target_group_id !== null ? (text, at) => setWords({ text, at }) : null}
                   hovered={hovered}
                   onHover={setHovered}
+                  onNote={async (ids, note) => {
+                    try {
+                      let updated = job;
+                      for (const id of ids) updated = await api.setRequirementNote(jobId, id, note);
+                      applySkills(updated);
+                    } catch (err) {
+                      setError((err as Error).message);
+                    }
+                  }}
                   onRemove={async (ids) => {
                     try {
                       let updated = job;

@@ -5,6 +5,7 @@ import type {
   Company,
   CompanyInput,
   ExtensionInfo,
+  Highlight,
   Importance,
   Job,
   JobDetail,
@@ -17,7 +18,7 @@ import type {
   SkillMark,
 } from "./types";
 
-export type JobChanges = Partial<JobInput> & { target_group_id?: number | null; study_only?: boolean; raw_text?: string | null };
+export type JobChanges = Partial<JobInput> & { target_group_id?: number | null; study_only?: boolean; raw_text?: string | null; highlights?: Highlight[] };
 type AIBody = { provider: AIProvider; providers?: Record<string, AIProviderInput> };
 const groupQuery = (groupId: number | null) => (groupId === null ? "" : `?group_id=${groupId}`);
 
@@ -93,6 +94,8 @@ export const api = {
     }),
   setRequirementImportance: (jobId: number, id: number, importance: Importance) =>
     request<JobDetail>(`/jobs/${jobId}/requirements/${id}`, { method: "PATCH", body: JSON.stringify({ importance }) }),
+  setRequirementNote: (jobId: number, id: number, note: string) =>
+    request<JobDetail>(`/jobs/${jobId}/requirements/${id}`, { method: "PATCH", body: JSON.stringify({ note }) }),
   removeRequirement: (jobId: number, id: number) =>
     request<JobDetail>(`/jobs/${jobId}/requirements/${id}`, { method: "DELETE" }),
   listSkills: () => request<SkillRow[]>("/skills"),

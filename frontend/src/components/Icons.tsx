@@ -174,6 +174,13 @@ export const EditIcon = () => (
   </svg>
 );
 
+export const HighlightIcon = () => (
+  <svg {...base}>
+    <path d="m9 11-6 6v3h3l6-6" />
+    <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+  </svg>
+);
+
 export const SettingsIcon = () => (
   <svg {...base}>
     <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />

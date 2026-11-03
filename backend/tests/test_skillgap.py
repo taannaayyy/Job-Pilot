@@ -597,6 +597,31 @@ def test_a_skill_picked_from_the_description_keeps_the_words(client):
     assert [(r["evidence"], r["evidence_at"], r["importance"]) for r in job["requirements"]] == [("YOLOv8 models", 40, "nice")]
 
 
+def test_words_highlighted_in_the_description_are_not_skills(client):
+    job = client.post("/api/jobs", json={"company": "Acme AI", "title": "AI Engineer"}).json()
+    assert job["highlights"] == []
+    res = client.patch(f"/api/jobs/{job['id']}", json={"raw_text": "We ship models weekly.", "highlights": [{"words": "ship models", "at": 3}]})
+    assert res.status_code == 200, res.text
+    job = res.json()
+    assert job["highlights"] == [{"words": "ship models", "at": 3, "note": ""}] and job["requirements"] == []
+    # Other changes leave them; null doesn't erase them, an empty list does.
+    assert client.patch(f"/api/jobs/{job['id']}", json={"notes": "x", "highlights": None}).json()["highlights"] == job["highlights"]
+    assert client.patch(f"/api/jobs/{job['id']}", json={"highlights": []}).json()["highlights"] == []
+
+
+def test_notes_on_highlights_and_on_skills_picked_from_the_description(client):
+    job, _ = target(client, connect=("Python",))
+    job = client.patch(f"/api/jobs/{job['id']}", json={"highlights": [{"words": "Python", "at": 15, "note": "Ask about it"}]}).json()
+    assert job["highlights"][0]["note"] == "Ask about it"
+    req = job["requirements"][0]
+    assert req["note"] == ""
+    job = client.patch(f"/api/jobs/{job['id']}/requirements/{req['id']}", json={"note": " Mostly pandas \n"}).json()
+    assert (job["requirements"][0]["note"], job["requirements"][0]["importance"]) == ("Mostly pandas", "must")
+    # Changing how much it matters leaves the note.
+    job = client.patch(f"/api/jobs/{job['id']}/requirements/{req['id']}", json={"importance": "nice"}).json()
+    assert (job["requirements"][0]["note"], job["requirements"][0]["importance"]) == ("Mostly pandas", "nice")
+
+
 def test_the_gap_says_which_words_a_skill_was_picked_from(client):
     job, _ = target(client, connect=())
     client.post(f"/api/jobs/{job['id']}/requirements", json={"name": "Keras", "evidence": "Keras or TensorFlow"})
