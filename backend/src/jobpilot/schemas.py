@@ -47,6 +47,14 @@ class JobCreate(_JobFields):
     notes: str = ""
 
 
+class Highlight(BaseModel):
+    """Words highlighted in the job description, starting at `at`; not a skill."""
+
+    words: str = Field(min_length=1, max_length=5000)
+    at: int = Field(ge=0)
+    note: str = Field(default="", max_length=5000)
+
+
 class JobUpdate(_JobFields):
     """All fields optional; only fields present in the request are changed."""
 
@@ -67,6 +75,7 @@ class JobUpdate(_JobFields):
     target_group_id: int | None = None
     study_only: bool | None = None
     raw_text: str | None = Field(default=None, max_length=100_000)
+    highlights: list[Highlight] | None = None
 
 
 class StatusEventOut(BaseModel):
@@ -117,13 +126,21 @@ class RequirementOut(BaseModel):
     min_years: int | None
     max_years: int | None
     detail: str | None
+    # The user's own note on it.
+    note: str = ""
 
 
 class JobDetail(JobOut):
     events: list[StatusEventOut]
     # Job description captured from the posting by the Chrome extension, or pasted.
     raw_text: str | None
+    highlights: list[Highlight]
     requirements: list[RequirementOut]
+
+    @field_validator("highlights", mode="before")
+    @classmethod
+    def _no_highlights(cls, v):
+        return v or []
 
 
 class _CompanyFields(BaseModel):

@@ -1498,7 +1498,11 @@ button.d-node.drop-after::after { bottom: -5px; }
 .job-description .small-note { margin-bottom: 10px; }
 .raw-text.selectable { position: relative; white-space: pre-wrap; font-size: 14px; line-height: 1.6; -webkit-user-select: text; user-select: text; cursor: text; }
 mark.picked { padding: 0 1px; border-radius: 3px; background: var(--marker); color: var(--marker-text); }
-button.add-words { position: absolute; z-index: 3; translate: -50% calc(-100% - 6px); height: 30px; padding: 0 10px; font-size: 12.5px; white-space: nowrap; box-shadow: var(--shadow-lg); }
+/* Words highlighted only to read again: a lighter marker than a skill's words. */
+mark.noted { position: relative; padding: 0 1px; border-radius: 3px; background: color-mix(in srgb, var(--marker) 38%, transparent); color: inherit; transition: background-color 0.15s ease; }
+mark.noted.lit { background: color-mix(in srgb, var(--marker) 60%, transparent); }
+.add-words { position: absolute; z-index: 3; display: flex; gap: 6px; translate: -50% calc(-100% - 6px); -webkit-user-select: none; user-select: none; }
+.add-words button { height: 30px; padding: 0 10px; font-size: 12.5px; white-space: nowrap; box-shadow: var(--shadow-lg); }
 .job-pop .paste textarea { min-height: 300px; }
 .req-add { display: flex; gap: 8px; align-items: flex-start; }
 .skill-search { position: relative; flex: 1; min-width: 0; }
@@ -1510,20 +1514,30 @@ button.add-words { position: absolute; z-index: 3; translate: -50% calc(-100% - 
 .ss-where { font-size: 11.5px; color: var(--muted); }
 .place-in-tree { margin-top: 6px; }
 .place-in-tree .skill-search-list { position: static; margin-top: 4px; box-shadow: none; }
-button.add-words.below { translate: -50% 6px; }
+.add-words.below { translate: -50% 6px; }
 mark.picked { position: relative; transition: background-color 0.15s ease, box-shadow 0.15s ease; }
 /* A skill under the pointer, on its words or in the list: both light up, and its name shows above the words. */
 mark.picked.lit { background: var(--accent); color: var(--accent-text); box-shadow: 0 0 0 1px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 50%, transparent); }
 mark.picked::before { content: attr(data-skills); position: absolute; z-index: 3; bottom: calc(100% + 12px); left: 0; padding: 3px 8px; border-radius: 6px; background: var(--text); color: var(--bg); font-size: 11.5px; font-weight: 600; line-height: 1.3; white-space: nowrap; box-shadow: var(--shadow-md); pointer-events: none; visibility: hidden; }
 mark.picked.lit::before { visibility: visible; }
+/* A note on a highlight: a dot at its end, shown in full on hover. */
+mark.picked, mark.noted { cursor: pointer; }
+mark.picked::before { width: max-content; max-width: 300px; white-space: pre-wrap; }
+mark.noted[data-note]::before { content: attr(data-note); position: absolute; z-index: 3; bottom: calc(100% + 8px); left: 0; width: max-content; max-width: 300px; padding: 4px 8px; border-radius: 6px; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 500; line-height: 1.4; white-space: pre-wrap; box-shadow: var(--shadow-md); pointer-events: none; visibility: hidden; }
+mark.noted.lit[data-note]::before { visibility: visible; }
+mark.has-note::after { content: ""; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1.5px var(--surface); pointer-events: none; }
+.mark-note { position: absolute; z-index: 4; width: min(300px, 100%); padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-lg); cursor: auto; white-space: normal; }
+.mark-note textarea { width: 100%; resize: vertical; font-size: 13px; }
+.mark-note .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+.mark-note .actions button { height: 28px; padding: 0 10px; font-size: 12.5px; }
 .req-chip { transition: background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
 .req-chip.lit { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); box-shadow: 0 0 0 1px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent); }
 /* The × on a highlight: shown on hover, takes its skills off the job. */
-mark.picked button.unpick { position: relative; top: -9px; z-index: 2; margin: 0 -8px 0 -9px; vertical-align: top; display: inline-flex; visibility: hidden; transition: visibility 0s linear 0.3s; align-items: center; justify-content: center; width: 17px; height: 17px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); box-shadow: var(--shadow); color: var(--muted); -webkit-user-select: none; user-select: none; }
-mark.picked button.unpick svg { width: 10px; height: 10px; }
+mark.picked button.unpick, mark.noted button.unpick { position: relative; top: -9px; z-index: 2; margin: 0 -8px 0 -9px; vertical-align: top; display: inline-flex; visibility: hidden; transition: visibility 0s linear 0.3s; align-items: center; justify-content: center; width: 17px; height: 17px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); box-shadow: var(--shadow); color: var(--muted); -webkit-user-select: none; user-select: none; }
+mark.picked button.unpick svg, mark.noted button.unpick svg { width: 10px; height: 10px; }
 /* Shown at once on hover, and kept a moment after, so the pointer can reach it. */
-mark.picked:hover button.unpick { visibility: visible; transition-delay: 0s; }
-mark.picked button.unpick:hover:not(:disabled) { color: var(--danger, #e5484d); transform: none; }
+mark.picked:hover button.unpick, mark.noted.lit button.unpick { visibility: visible; transition-delay: 0s; }
+mark.picked button.unpick:hover:not(:disabled), mark.noted button.unpick:hover:not(:disabled) { color: var(--danger, #e5484d); transform: none; }
 /* The text stays clear of the scrollbar, so a × at the end of a line can be clicked. */
 .job-pop-col { scrollbar-gutter: stable; padding-right: 14px; }
 

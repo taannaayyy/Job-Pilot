@@ -609,14 +609,18 @@ def add_requirement(job_id: int, body: RequirementIn, session: Session = Depends
 
 
 class RequirementUpdate(BaseModel):
-    importance: Importance
+    importance: Importance | None = None
+    note: str | None = Field(default=None, max_length=5000)
 
 
 @router.patch("/jobs/{job_id}/requirements/{requirement_id}", response_model=JobDetail)
 def update_requirement(job_id: int, requirement_id: int, body: RequirementUpdate, session: Session = Depends(get_session)):
     job = _get_job(session, job_id)
     req = next((r for r in job.requirements if r.id == requirement_id), None) or _missing("Requirement")
-    req.importance, req.source = body.importance, "user"
+    if body.importance is not None:
+        req.importance, req.source = body.importance, "user"
+    if body.note is not None:
+        req.note = body.note.strip()
     session.commit()
     return _to_out(job, JobDetail)
 

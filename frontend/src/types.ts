@@ -82,7 +82,17 @@ export interface JobDetail extends Job {
   events: StatusEvent[];
   /** Job description captured from the posting by the Chrome extension, or pasted. */
   raw_text: string | null;
+  /** Words highlighted in the description to read again, without adding them as a skill. */
+  highlights: Highlight[];
   requirements: Requirement[];
+}
+
+/** Words highlighted in a job description, starting at `at`. */
+export interface Highlight {
+  words: string;
+  at: number;
+  /** The user's note on the words. */
+  note?: string;
 }
 
 // ---- Skill Gap
@@ -106,6 +116,8 @@ export interface Requirement {
   evidence: string | null;
   /** Where in the description the words were selected. */
   evidence_at: number | null;
+  /** The user's own note on it, written on its words in the description. */
+  note: string;
   /** "user"; "dictionary" or "model" for ones made when the app still read descriptions */
   source: string;
   mark: SkillMark | null;

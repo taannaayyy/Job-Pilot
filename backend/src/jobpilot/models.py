@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from jobpilot.db import Base, UTCDateTime, utcnow
@@ -118,6 +118,8 @@ class Job(Base):
     linkedin_job_id: Mapped[str | None] = mapped_column(String(20), unique=True, index=True)
     # Job description as captured from the posting (or pasted), kept to read while connecting skills.
     raw_text: Mapped[str | None] = mapped_column(Text)
+    # Words the user highlighted in it to read again, without adding them as a skill: [{"words", "at", "note"}].
+    highlights: Mapped[list[dict]] = mapped_column(JSON, default=list, server_default="[]")
     # Skill Gap: the role group this job is a target of. Status doesn't matter.
     target_group_id: Mapped[int | None] = mapped_column(ForeignKey("role_group.id", ondelete="SET NULL"), index=True)
     # Kept only to study the role: not shown on the job board.
@@ -209,6 +211,8 @@ class Requirement(Base):
     max_years: Mapped[int | None] = mapped_column()
     # Degrees: the fields of study accepted ("Computer Engineering, Statistics").
     detail: Mapped[str | None] = mapped_column(String(500))
+    # The user's own note on it, written on its words in the description.
+    note: Mapped[str] = mapped_column(Text, default="", server_default="")
     # "user"; "dictionary" and "model" for ones made when the app still read job descriptions.
     source: Mapped[str] = mapped_column(String(20))
 
